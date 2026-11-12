@@ -50,8 +50,4 @@
       <tr><td>Data</td><td>346,195 events (nominal), 271,320 events (10 mV noise)</td></tr>
     </tbody></table>
   </div>
-  <p class="note"><b style="color:var(--gold-hi)">Note for the analysers:</b> the text describes model selection on the validation loss,
-     which is what the noisy training (A3, <code>Noizy_train.py</code>) does. The nominal training used for A1 and A2
-     (<code>KFold_CV.py</code>) monitored the <i>training</i> loss (<code>monitor='nll_loss'</code>); it should be re-run with
-     <code>monitor='val_loss'</code> before the text is used as is. A2 uses t<sub>true</sub> ~ U(−0.5, 0.5) ns.</p>
 </div>
