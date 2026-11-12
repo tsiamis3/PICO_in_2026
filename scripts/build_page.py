@@ -30,6 +30,12 @@ def img(fname, alt):
     return f'<img loading="lazy" src="data:image/png;base64,{b64}" alt="{html.escape(alt)}">'
 
 
+def dl(base):
+    """Links λήψης για τη λευκή έκδοση ενός plot (αρχεία στο plots_light/ του repo)."""
+    return (f'<div class="dl">White version: <a href="plots_light/{base}.png" download>PNG</a>'
+            f' · <a href="plots_light/{base}.pdf" download>PDF</a></div>')
+
+
 def fmt_tail(v):
     return "–" if v != v else f"{v:.1f}"
 
@@ -114,6 +120,7 @@ for tid, title, kind, desc, wide, kpi in RESULT_TABS:
               <figcaption><span class="dot" style="background:{COLOR[k]}"></span><b>{k}</b>&nbsp;{html.escape(a['label'])}
                 <span class="fig-kpi">{kpi(a)}</span></figcaption>
               {img(f"{a['name']}_{kind}.png", f"{title} — {k} — {SEL_TITLE[sel]}")}
+              {dl(f"{a['name']}_{kind}")}
             </figure>""")
         blocks.append(f'<div class="figs {"wide" if wide else ""}" data-sel="{sel}">{"".join(figs)}</div>')
     result_sections.append(f"""<section class="tabpane" id="{tid}">
@@ -215,6 +222,11 @@ page = f"""<!DOCTYPE html>
   #lightbox img {{ max-width:100%; max-height:100%; border-radius:6px; border:1px solid var(--line); }}
   footer {{ color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--line); padding-top:16px; }}
   .hidden {{ visibility:hidden; }}
+  .dl {{ font-size:12.5px; color:var(--muted); margin-top:8px; }}
+  .dl a {{ color:var(--gold-hi); text-decoration:none; border-bottom:1px dotted var(--gold-dim); }}
+  .dl a:hover {{ border-bottom-style:solid; }}
+  .zipbtn {{ font:500 13px Inter,sans-serif; color:#0e0e0c; background:var(--gold); padding:8px 12px; border-radius:7px; text-decoration:none; white-space:nowrap; }}
+  .zipbtn:hover {{ background:var(--gold-hi); }}
   @media (max-width:1100px) {{ .figs {{ grid-template-columns:1fr 1fr; }} .two {{ grid-template-columns:1fr; }} }}
   @media (max-width:720px) {{ .figs {{ grid-template-columns:1fr; }} h1 {{ font-size:26px; }} #chargePlot {{ height:560px; }} }}
 </style>
@@ -229,7 +241,10 @@ page = f"""<!DOCTYPE html>
 
 <nav class="bar"><div class="wrap">
   <div class="tabs">{nav}</div>
-  <div class="segs" id="selToggle">{seltoggle}</div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <div class="segs" id="selToggle">{seltoggle}</div>
+    <a class="zipbtn" href="plots_light.zip" download title="All plots, white background, PNG + PDF">⬇ White plots (zip)</a>
+  </div>
 </div></nav>
 
 <main>
@@ -247,7 +262,7 @@ page = f"""<!DOCTYPE html>
     </table></div>
     <div class="two">
       <figure><figcaption><h3 style="margin:0">Pad-centre selection</h3></figcaption>
-        {img("selection_pad_centres.png", "Pad centre selection")}</figure>
+        {img("selection_pad_centres.png", "Pad centre selection")}{dl("selection_pad_centres")}</figure>
       <div class="card"><h3>Method notes</h3><ul class="notes">
         <li><b>Charge.</b> Real <code>qall_idx</code> values from the ROOT file (joined on the event id <code>srs</code>,
             same threshold as training: <code>qall &lt; 1 → 0</code>); Q is the sum over the 4 pads. Inverting the min-max
@@ -267,6 +282,10 @@ page = f"""<!DOCTYPE html>
       <p>All three scenarios on common axes; bias fixed to ±10&nbsp;ps. Hover a point for its charge range and number of events,
          click a legend entry to hide a scenario. The selection switch in the bar changes the track selection.</p></div>
     <div class="card"><div id="chargePlot"></div></div>
+    <div class="dl" style="margin-top:8px">Static white version: all tracks
+      <a href="plots_light/comparison_charge_analysis.png" download>PNG</a> · <a href="plots_light/comparison_charge_analysis.pdf" download>PDF</a>
+      &nbsp;|&nbsp; pad centres
+      <a href="plots_light/comparison_charge_analysis_centres.png" download>PNG</a> · <a href="plots_light/comparison_charge_analysis_centres.pdf" download>PDF</a></div>
   </section>
 
   {''.join(result_sections)}

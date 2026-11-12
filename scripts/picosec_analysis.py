@@ -34,9 +34,25 @@ from sklearn.metrics import r2_score
 NS_TO_PS = 1000.0
 
 # Σκοτεινό θέμα (μαύρο / σκούρο κίτρινο) — ίδιο με τη σελίδα
-THEME = dict(bg="#0e0e0c", panel="#16150f", fg="#e9e4d4", muted="#9d977f", grid="#2c2a22",
-             accent="#d4a017", hist="#6d6a5e", zero="#8a8470")
-SCENARIO_COLORS = {"A1": "#f2c230", "A2": "#ff6f59", "A3": "#4cc9b0"}
+# Δύο θέματα: "dark" για τη σελίδα, "light" (λευκό) για λήψη / paper
+THEMES = {
+    "dark": dict(bg="#0e0e0c", panel="#16150f", fg="#e9e4d4", muted="#9d977f", grid="#2c2a22",
+                 accent="#d4a017", hist="#6d6a5e", zero="#8a8470", box="#4cc9b0", cmap2d="inferno",
+                 colors={"A1": "#f2c230", "A2": "#ff6f59", "A3": "#4cc9b0"}),
+    "light": dict(bg="#ffffff", panel="#ffffff", fg="#1b1d21", muted="#5f6670", grid="#e4e4e4",
+                  accent="#b8860b", hist="#b3b3b3", zero="#666666", box="#d1495b", cmap2d="Greys",
+                  colors={"A1": "#1f5fa8", "A2": "#d1495b", "A3": "#2a9d5c"}),
+}
+THEME = dict(THEMES["dark"])              # το ενεργό θέμα (αλλάζει in-place με set_theme)
+SCENARIO_COLORS = THEMES["dark"]["colors"]
+
+
+def set_theme(name, analyses=()):
+    """Αλλάζει το ενεργό θέμα και τα χρώματα των αναλύσεων (A1/A2/A3 από τα 2 πρώτα γράμματα του name)."""
+    THEME.clear()
+    THEME.update(THEMES[name])
+    for a in analyses:
+        a.color = THEME["colors"][a.name[:2]]
 
 
 # =====================================================================================
@@ -495,12 +511,12 @@ class Plotter:
         """hit_x/hit_y όλων των tracks, με τα παράθυρα της επιλογής."""
         D = a.Data_test
         fig, ax = plt.subplots(figsize=(11, 6.5))
-        h = ax.hist2d(D["hit_x"], D["hit_y"], bins=[260, 160], cmap="inferno", cmin=1)
+        h = ax.hist2d(D["hit_x"], D["hit_y"], bins=[260, 160], cmap=THEME["cmap2d"], cmin=1)
         fig.colorbar(h[3], ax=ax, label="Tracks / bin")
         for x, y in zip(sel.xc, sel.yc):
             ax.add_patch(plt.Rectangle((x - sel.hw, y - sel.hw), 2 * sel.hw, 2 * sel.hw,
-                                       fill=False, ec="#4cc9b0", lw=2))
-            ax.plot(x, y, "+", color="#4cc9b0", ms=10, mew=2)
+                                       fill=False, ec=THEME["box"], lw=2))
+            ax.plot(x, y, "+", color=THEME["box"], ms=10, mew=2)
         ax.set_xlabel("hit_x [cm]"); ax.set_ylabel("hit_y [cm]")
         ax.set_aspect("equal"); ax.grid(False)
         ax.set_title(f"Track positions ({a.label})\nboxes: {sel.describe()}", fontsize=12)
@@ -560,12 +576,16 @@ if __name__ == "__main__":
     sds = np.concatenate([a.map_tt["sd"].ravel() for a in analyses + analyses_c])
     sd_lim = (np.floor(np.nanmin(sds)), np.ceil(np.nanmax(sds)))
 
-    P = Plotter(analyses, out_dir, bias_lim_ps=10.0, q_unit="", sd_lim=sd_lim)
-    P.all()
-    P.selection_map(analyses[0], pad_centres)
-    Pc = Plotter(analyses_c, out_dir, bias_lim_ps=10.0, q_unit="", sd_lim=sd_lim, suffix="_centres",
-                 comparison_title="Bias and resolution vs charge — pad centres (±1.25 mm)")
-    Pc.all()
+    # ίδια plots σε δύο θέματα: σκοτεινό (σελίδα) και λευκό (λήψη / paper)
+    for theme, odir in (("dark", out_dir), ("light", out_dir + "_light")):
+        set_theme(theme, analyses + analyses_c)
+        P = Plotter(analyses, odir, bias_lim_ps=10.0, q_unit="", sd_lim=sd_lim)
+        P.all()
+        P.selection_map(analyses[0], pad_centres)
+        Pc = Plotter(analyses_c, odir, bias_lim_ps=10.0, q_unit="", sd_lim=sd_lim, suffix="_centres",
+                     comparison_title="Bias and resolution vs charge — pad centres (±1.25 mm)")
+        Pc.all()
+    set_theme("dark", analyses + analyses_c)
 
     for a in analyses + analyses_c:
         a.charge_frame.to_csv(os.path.join(out_dir, f"{a.name}_charge_analysis.csv"), index=False)
