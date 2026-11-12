@@ -1,0 +1,98 @@
+[
+  {
+    "name": "A1_nominal",
+    "label": "Train nominal / test nominal",
+    "n_events_results": 346195,
+    "charge_check_max_abs_diff": 2.1457672119140625e-05,
+    "charge_check_median_abs_diff": 9.5367431640625e-07,
+    "pull_cut": 5.0,
+    "frac_removed_by_pull_cut": 0.00048238709397885327,
+    "n_events": 346028,
+    "resolution_ps": {
+      "mu": 0.8894814433508926,
+      "err_mu": 0.020842801596251497,
+      "sigma_core": 18.26534132691388,
+      "sigma_tail": 29.04242959339448,
+      "frac_core": 0.8228006582477664,
+      "sigma_tot": 20.590434921226045,
+      "sigma_single": 22.093628816222814,
+      "mu_single": 0.9274848595440908,
+      "rms": 20.75764074930958
+    },
+    "pull": {
+      "mu": 0.039806965979012614,
+      "err_mu": 0.0019310998514497305,
+      "sigma_core": 0.9237348873423801,
+      "sigma_tail": 1.4325684666857028,
+      "frac_core": 0.8643113322425608,
+      "sigma_tot": 1.0079545019038259,
+      "sigma_single": 1.0093578916047108,
+      "mu_single": 0.04266261748594144,
+      "rms": 1.008186497720612
+    }
+  },
+  {
+    "name": "A2_train_nominal_test_noisy",
+    "label": "Train nominal / test noisy (10 mV)",
+    "n_events_results": 271320,
+    "charge_check_max_abs_diff": 2.1457672119140625e-05,
+    "charge_check_median_abs_diff": 9.5367431640625e-07,
+    "pull_cut": 5.0,
+    "frac_removed_by_pull_cut": 0.05107253427686864,
+    "n_events": 257463,
+    "resolution_ps": {
+      "mu": 2.947517653566632,
+      "err_mu": 0.1291754362042055,
+      "sigma_core": 30.504951996339848,
+      "sigma_tail": 65.97366079346197,
+      "frac_core": 0.698050352465693,
+      "sigma_tot": 44.3149555103256,
+      "sigma_single": 46.40837732394068,
+      "mu_single": -2.4370625117558498,
+      "rms": 53.49897964165685
+    },
+    "pull": {
+      "mu": 0.05388464675183141,
+      "err_mu": 0.0072367078243908796,
+      "sigma_core": 1.366805340258494,
+      "sigma_tail": 2.7764769337490227,
+      "frac_core": 0.6919033806615523,
+      "sigma_tot": 1.915110100182347,
+      "sigma_single": 1.6202193421065791,
+      "mu_single": 0.03971573215551338,
+      "rms": 1.6923099202553729
+    }
+  },
+  {
+    "name": "A3_noisy_train",
+    "label": "Train noisy / test noisy (10 mV)",
+    "n_events_results": 271320,
+    "charge_check_max_abs_diff": 2.1457672119140625e-05,
+    "charge_check_median_abs_diff": 9.5367431640625e-07,
+    "pull_cut": 5.0,
+    "frac_removed_by_pull_cut": 0.0003833112192245247,
+    "n_events": 271216,
+    "resolution_ps": {
+      "mu": 0.24951158892141442,
+      "err_mu": 0.045286092660295825,
+      "sigma_core": 30.757514216409195,
+      "sigma_tail": 55.799185183961,
+      "frac_core": 0.6523738608046377,
+      "sigma_tot": 41.22514784492674,
+      "sigma_single": 41.96074564716089,
+      "mu_single": 0.17207412223187846,
+      "rms": 43.34109466370119
+    },
+    "pull": {
+      "mu": 0.0071190750508478284,
+      "err_mu": 0.0015560650554379961,
+      "sigma_core": 0.9182420761498883,
+      "sigma_tail": 1.3497586523741572,
+      "frac_core": 0.8469290917330942,
+      "sigma_tot": 0.9964817775669782,
+      "sigma_single": 1.0046782361802442,
+      "mu_single": 0.007230805356143403,
+      "rms": 0.9965498548323156
+    }
+  }
+]

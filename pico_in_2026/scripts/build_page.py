@@ -1,0 +1,245 @@
+"""
+Φτιάχνει ένα αυτόνομο index.html (εικόνες ενσωματωμένες ως base64) με όλα τα αποτελέσματα.
+Τρέξιμο:  python build_page.py   (μετά το picosec_analysis.py)
+Για GitHub Pages: ανέβασε το index.html στο repo (root ή /docs) και ενεργοποίησε το Pages.
+"""
+import os
+import json
+import base64
+import html
+import pandas as pd
+
+PLOTS = "plots"
+OUT = "site/index.html"
+
+analyses = json.load(open(os.path.join(PLOTS, "summary.json")))
+STYLE = {  # ίδια χρώματα με τα PNG
+    "A1_nominal": ("#1f5fa8", "circle"),
+    "A2_train_nominal_test_noisy": ("#d1495b", "square-open"),
+    "A3_noisy_train": ("#2a9d5c", "triangle-up-open"),
+}
+SHORT = {"A1_nominal": "A1", "A2_train_nominal_test_noisy": "A2", "A3_noisy_train": "A3"}
+PLOT_KINDS = [
+    ("1_total_resolution", "Total resolution", "Double-Gaussian fit of t<sub>network</sub> − t<sub>true</sub>."),
+    ("2_pulls", "Pulls", "(t<sub>network</sub> − t<sub>true</sub>) / σ<sub>network</sub>; a well-calibrated network gives σ ≈ 1."),
+    ("3_charge_analysis", "Charge analysis", "Events sorted by total charge Q, 10,000 events per point, Gaussian fit per point."),
+    ("4_heatmap_tt", "Heatmaps: bias and std", "Gaussian fit of t<sub>network</sub> − t<sub>true</sub> per (hit_x, hit_y) cell (≥ 200 hits)."),
+    ("5_heatmap_pull", "Heatmaps: pull bias and std", "Gaussian fit of the pull per (hit_x, hit_y) cell (≥ 200 hits)."),
+]
+
+
+def img(fname, alt):
+    with open(os.path.join(PLOTS, fname), "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    return f'<img loading="lazy" src="data:image/png;base64,{b64}" alt="{html.escape(alt)}">'
+
+
+# ---------------- Πίνακας σύνοψης ----------------
+rows = []
+for a in analyses:
+    r, p = a["resolution_ps"], a["pull"]
+    c = STYLE[a["name"]][0]
+    rows.append(f"""<tr>
+      <td><span class="dot" style="background:{c}"></span><b>{SHORT[a['name']]}</b> {html.escape(a['label'])}</td>
+      <td class="num">{a['n_events']:,}</td>
+      <td class="num">{r['sigma_core']:.1f}</td>
+      <td class="num">{r['sigma_tail']:.1f}</td>
+      <td class="num">{100*r['frac_core']:.0f}%</td>
+      <td class="num"><b>{r['sigma_tot']:.1f}</b></td>
+      <td class="num">{r['mu']:+.1f}</td>
+      <td class="num">{p['sigma_tot']:.2f}</td>
+      <td class="num">{p['mu']:+.3f}</td>
+      <td class="num">{100*a['frac_removed_by_pull_cut']:.2f}%</td>
+    </tr>""")
+table = "\n".join(rows)
+
+# ---------------- Δεδομένα για το διαδραστικό charge plot ----------------
+traces = []
+for a in analyses:
+    fr = pd.read_csv(os.path.join(PLOTS, f"{a['name']}_charge_analysis.csv"))
+    c, sym = STYLE[a["name"]]
+    for yaxis, y, err in (("y", "Mu", "Mu_error"), ("y2", "Sigma", "Sigma_error")):
+        traces.append(dict(
+            x=fr["Q"].round(3).tolist(), y=fr[y].round(3).tolist(),
+            error_y=dict(type="data", array=fr[err].round(3).tolist(), thickness=1.2, width=3, color=c),
+            customdata=fr[["Q_min", "Q_max", "N"]].round(2).values.tolist(),
+            mode="markers", marker=dict(color=c, symbol=sym, size=7, line=dict(color=c, width=1.5)),
+            name=a["label"], legendgroup=a["name"], showlegend=(yaxis == "y2"), yaxis=yaxis,
+            hovertemplate=("<b>%{fullData.name}</b><br>Q = %{x:.1f} (range %{customdata[0]:.1f}–%{customdata[1]:.1f})"
+                           "<br>" + ("bias" if y == "Mu" else "σ") + " = %{y:.2f} ± %{error_y.array:.2f} ps"
+                           "<br>N = %{customdata[2]:,}<extra></extra>"),
+        ))
+
+# ---------------- Ενότητες ανά ανάλυση ----------------
+sections = []
+for a in analyses:
+    figs = []
+    for kind, title, cap in PLOT_KINDS:
+        figs.append(f"""<figure class="{'wide' if 'heatmap' in kind else ''}">
+          <figcaption><h3>{title}</h3><p>{cap}</p></figcaption>
+          {img(f"{a['name']}_{kind}.png", f"{title} — {a['label']}")}
+        </figure>""")
+    r = a["resolution_ps"]
+    sections.append(f"""<section class="analysis" id="{SHORT[a['name']].lower()}" data-tab="{SHORT[a['name']]}">
+      <div class="kpis">
+        <div><span>σ<sub>tot</sub></span><b>{r['sigma_tot']:.1f} ps</b></div>
+        <div><span>σ<sub>core</sub></span><b>{r['sigma_core']:.1f} ps</b></div>
+        <div><span>bias</span><b>{r['mu']:+.1f} ps</b></div>
+        <div><span>σ(pull)</span><b>{a['pull']['sigma_tot']:.2f}</b></div>
+        <div><span>events</span><b>{a['n_events']:,}</b></div>
+      </div>
+      <div class="grid">{''.join(figs)}</div>
+    </section>""")
+
+tabs = "".join(
+    f'<button class="tab" data-target="{SHORT[a["name"]].lower()}">'
+    f'<span class="dot" style="background:{STYLE[a["name"]][0]}"></span>{SHORT[a["name"]]} · {html.escape(a["label"])}</button>'
+    for a in analyses)
+
+page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PICOSEC Micromegas — Timing network results</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  :root {{ --bg:#f7f7f5; --card:#fff; --ink:#1b1d21; --muted:#5f6670; --line:#e3e3df; --accent:#1f5fa8; }}
+  * {{ box-sizing:border-box; }}
+  body {{ margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 Inter,system-ui,sans-serif; }}
+  header {{ background:#14171c; color:#eef0f3; padding:44px 24px 36px; }}
+  header .wrap, main {{ max-width:1240px; margin:0 auto; }}
+  main {{ padding:0 24px 64px; }}
+  .eyebrow {{ font:500 12px/1 'JetBrains Mono',monospace; letter-spacing:.12em; text-transform:uppercase; color:#8fb4e6; }}
+  h1 {{ font-size:34px; line-height:1.15; margin:10px 0 12px; letter-spacing:-.01em; }}
+  header p {{ color:#b9bfc8; max-width:820px; margin:0; }}
+  h2 {{ font-size:22px; margin:44px 0 6px; letter-spacing:-.01em; }}
+  h2 + p.lead {{ color:var(--muted); margin:0 0 18px; max-width:860px; }}
+  h3 {{ font-size:16px; margin:0; }}
+  .card {{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; }}
+  table {{ width:100%; border-collapse:collapse; font-size:14px; }}
+  th, td {{ padding:10px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }}
+  th {{ font-weight:600; color:var(--muted); font-size:12.5px; }}
+  td.num, th.num {{ text-align:right; font-family:'JetBrains Mono',monospace; font-size:13px; }}
+  tr:last-child td {{ border-bottom:none; }}
+  .scroll {{ overflow-x:auto; }}
+  .dot {{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:middle; }}
+  #chargePlot {{ width:100%; height:640px; }}
+  .tabs {{ display:flex; gap:8px; flex-wrap:wrap; position:sticky; top:0; z-index:5; background:var(--bg); padding:12px 0; border-bottom:1px solid var(--line); }}
+  .tab {{ font:500 14px Inter,sans-serif; border:1px solid var(--line); background:#fff; color:var(--ink); padding:9px 14px; border-radius:8px; cursor:pointer; }}
+  .tab.active {{ background:var(--ink); color:#fff; border-color:var(--ink); }}
+  .analysis {{ display:none; padding-top:18px; }}
+  .analysis.active {{ display:block; }}
+  .kpis {{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px; }}
+  .kpis div {{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:12px 14px; }}
+  .kpis span {{ display:block; color:var(--muted); font-size:12.5px; }}
+  .kpis b {{ font:600 22px 'JetBrains Mono',monospace; }}
+  .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
+  figure {{ margin:0; background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; }}
+  figure.wide {{ grid-column:1 / -1; }}
+  figure img {{ width:100%; height:auto; display:block; margin-top:10px; cursor:zoom-in; }}
+  figcaption p {{ margin:2px 0 0; color:var(--muted); font-size:13px; }}
+  ul.notes {{ margin:0; padding-left:20px; }}
+  ul.notes li {{ margin:6px 0; }}
+  code {{ font-family:'JetBrains Mono',monospace; font-size:.88em; background:#eef0f2; padding:1px 5px; border-radius:4px; }}
+  #lightbox {{ position:fixed; inset:0; background:rgba(10,12,15,.88); display:none; align-items:center; justify-content:center; z-index:50; cursor:zoom-out; padding:24px; }}
+  #lightbox img {{ max-width:100%; max-height:100%; background:#fff; border-radius:6px; }}
+  footer {{ color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--line); padding-top:16px; }}
+  @media (max-width:860px) {{ .grid {{ grid-template-columns:1fr; }} .kpis {{ grid-template-columns:repeat(2,1fr); }} h1 {{ font-size:26px; }} #chargePlot {{ height:540px; }} }}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="eyebrow">PICOSEC Micromegas · 4-pad timing network</div>
+  <h1>Timing resolution with a heteroscedastic neural network</h1>
+  <p>Out-of-fold (10-fold) predictions of the event time from per-pad charge, e-peak amplitude, signal maximum and fitted time.
+     Three scenarios: nominal data, a network trained on nominal data evaluated on data with 10&nbsp;mV noise,
+     and a network trained and evaluated on the noisy data. All times in picoseconds.</p>
+</div></header>
+
+<main>
+  <h2>Summary</h2>
+  <p class="lead">Double-Gaussian fit of the residual t<sub>network</sub> − t<sub>true</sub> and of the pull, after the cut |pull| &lt; 5.
+     σ<sub>tot</sub> = √(f<sub>core</sub>σ<sub>core</sub>² + f<sub>tail</sub>σ<sub>tail</sub>²), with area fractions.</p>
+  <div class="card scroll"><table>
+    <thead><tr><th>Scenario</th><th class="num">Events</th><th class="num">σ<sub>core</sub> [ps]</th><th class="num">σ<sub>tail</sub> [ps]</th>
+      <th class="num">f<sub>core</sub></th><th class="num">σ<sub>tot</sub> [ps]</th><th class="num">Bias [ps]</th>
+      <th class="num">σ(pull)</th><th class="num">μ(pull)</th><th class="num">Removed by pull cut</th></tr></thead>
+    <tbody>{table}</tbody>
+  </table></div>
+
+  <h2>Bias and resolution vs charge</h2>
+  <p class="lead">All three scenarios on common axes. Bias range fixed to ±10&nbsp;ps. Hover a point for its charge range and number of events;
+     click a legend entry to hide a scenario.</p>
+  <div class="card"><div id="chargePlot"></div></div>
+
+  <h2>Per-scenario results</h2>
+  <p class="lead">Click any plot to enlarge it. Std heatmaps share one colour scale across scenarios, so the colours compare directly.</p>
+  <nav class="tabs">{tabs}</nav>
+  {''.join(sections)}
+
+  <h2>Method notes</h2>
+  <div class="card"><ul class="notes">
+    <li><b>Charge.</b> The network inputs are min-max normalised per column. The charge on this page is the real <code>qall_idx</code> value,
+        taken from the ROOT file by the unique event id <code>srs</code> with the same threshold as training (<code>qall &lt; 1 → 0</code>);
+        Q is the sum over the 4 pads. Inverting the normalisation gives the same values (max difference 2·10<sup>−5</sup>).</li>
+    <li><b>Predictions.</b> Regenerated from the saved fold models (<code>best_model_fold*.h5</code>) with the training preprocessing.
+        The shuffle and 10-fold split use <code>random_state=1312</code>, so every event is predicted by the model that did not see it.
+        Train-nominal/test-noisy uses the 10-model ensemble with voltage-offset correction; σ<sub>network</sub> combines the mean
+        predicted variance and the spread between models.</li>
+    <li><b>Fits.</b> Two-pass Gaussian (second pass within ±5σ, binning with best R²). Total resolution and pulls use a double Gaussian
+        with a common mean. Heatmap cells need at least 200 hits.</li>
+    <li><b>Selection.</b> |pull| &lt; 5 in all scenarios.</li>
+  </ul></div>
+
+  <footer>PICOSEC Micromegas Collaboration · AUTh · Generated with <code>picosec_analysis.py</code> and <code>build_page.py</code>.</footer>
+</main>
+
+<div id="lightbox"><img alt=""></div>
+
+<script>
+  // ---- Tabs ----
+  const tabs = document.querySelectorAll('.tab');
+  const secs = document.querySelectorAll('.analysis');
+  function show(id) {{
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.target === id));
+    secs.forEach(s => s.classList.toggle('active', s.id === id));
+  }}
+  tabs.forEach(t => t.addEventListener('click', () => {{ show(t.dataset.target); history.replaceState(null, '', '#' + t.dataset.target); }}));
+  const start = (location.hash || '').slice(1);
+  show(['a1','a2','a3'].includes(start) ? start : 'a1');
+  window.addEventListener('hashchange', () => {{ const h = location.hash.slice(1); if (['a1','a2','a3'].includes(h)) show(h); }});
+
+  // ---- Lightbox ----
+  const lb = document.getElementById('lightbox'), lbImg = lb.querySelector('img');
+  document.querySelectorAll('figure img').forEach(im => im.addEventListener('click', () => {{ lbImg.src = im.src; lb.style.display = 'flex'; }}));
+  lb.addEventListener('click', () => lb.style.display = 'none');
+  document.addEventListener('keydown', e => {{ if (e.key === 'Escape') lb.style.display = 'none'; }});
+
+  // ---- Interactive charge comparison ----
+  const traces = {json.dumps(traces)};
+  const axis = {{ gridcolor:'#ececea', zerolinecolor:'#9aa0a6', linecolor:'#9aa0a6', ticks:'outside', tickcolor:'#9aa0a6' }};
+  const layout = {{
+    font: {{ family:'Inter, sans-serif', size:13, color:'#1b1d21' }},
+    paper_bgcolor:'#fff', plot_bgcolor:'#fff', margin: {{ l:70, r:20, t:10, b:60 }},
+    xaxis: {{ ...axis, title:{{text:'Total charge Q'}}, anchor:'y2' }},
+    yaxis: {{ ...axis, title:{{text:'Bias μ [ps]'}}, range:[-10,10], domain:[0.6,1], zeroline:true, zerolinewidth:1.5 }},
+    yaxis2: {{ ...axis, title:{{text:'Resolution σ [ps]'}}, rangemode:'tozero', domain:[0,0.52] }},
+    legend: {{ orientation:'h', x:0, y:-0.14 }},
+    hoverlabel: {{ bgcolor:'#fff', bordercolor:'#c9ccd1', font: {{ family:'Inter, sans-serif' }} }},
+  }};
+  if (window.Plotly) {{
+    Plotly.newPlot('chargePlot', traces, layout, {{ responsive:true, displaylogo:false }});
+  }} else {{
+    document.getElementById('chargePlot').innerHTML = '{img("comparison_charge_analysis.png", "Bias and resolution vs charge")}';
+  }}
+</script>
+</body>
+</html>"""
+
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
+with open(OUT, "w", encoding="utf-8") as f:
+    f.write(page)
+print(OUT, f"{os.path.getsize(OUT)/1e6:.1f} MB")
