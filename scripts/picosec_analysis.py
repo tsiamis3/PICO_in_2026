@@ -33,6 +33,11 @@ from sklearn.metrics import r2_score
 
 NS_TO_PS = 1000.0
 
+# Σκοτεινό θέμα (μαύρο / σκούρο κίτρινο) — ίδιο με τη σελίδα
+THEME = dict(bg="#0e0e0c", panel="#16150f", fg="#e9e4d4", muted="#9d977f", grid="#2c2a22",
+             accent="#d4a017", hist="#6d6a5e", zero="#8a8470")
+SCENARIO_COLORS = {"A1": "#f2c230", "A2": "#ff6f59", "A3": "#4cc9b0"}
+
 
 # =====================================================================================
 # Fits — ίδια λογική με fit_gaus2 / fit_gaus2_double του pico_utils (χωρίς figures)
@@ -347,7 +352,13 @@ class Plotter:
         self.q_label = "Total charge Q" + (f" [{q_unit}]" if q_unit else "")
         self.pull_bias_lim, self.pull_sd_lim = pull_bias_lim, pull_sd_lim
         os.makedirs(out_dir, exist_ok=True)
-        plt.rcParams.update({"font.size": 12, "axes.grid": True, "grid.alpha": 0.3,
+        T = THEME
+        plt.rcParams.update({"figure.facecolor": T["bg"], "axes.facecolor": T["bg"], "savefig.facecolor": T["bg"],
+                             "text.color": T["fg"], "axes.labelcolor": T["fg"], "axes.edgecolor": T["muted"],
+                             "xtick.color": T["muted"], "ytick.color": T["muted"], "grid.color": T["grid"],
+                             "legend.facecolor": T["panel"], "legend.edgecolor": T["grid"], "legend.labelcolor": T["fg"],
+                             "axes.titlecolor": T["fg"]})
+        plt.rcParams.update({"font.size": 12, "axes.grid": True, "grid.alpha": 1.0,
                              "axes.spines.top": False, "axes.spines.right": False})
         # κοινή κλίμακα για τα std heatmaps (ps)
         if sd_lim is None:
@@ -365,7 +376,7 @@ class Plotter:
         fig, ax = plt.subplots(figsize=(8, 5.5))
         n, edges = res["hist"]["n"], res["hist"]["edges"]
         bb = 0.5 * (edges[1:] + edges[:-1])
-        ax.stairs(n, edges, color="0.35", fill=True, alpha=0.35, label="Data")
+        ax.stairs(n, edges, color=THEME["hist"], fill=True, alpha=0.8, label="Data")
         a1, mu, s1, a2, s2 = res["popt"]
         xf = np.linspace(edges[0], edges[-1], 1000)
         fmt = "{:.2f}" if unit == "ps" else "{:.3f}"
@@ -384,7 +395,7 @@ class Plotter:
                    f"σ_tot = {fmt.format(res['sigma_tot'])}{u}\n"
                    f"N = {res['n_events']:,}")
         ax.text(0.02, 0.97, txt, transform=ax.transAxes, va="top", ha="left", fontsize=11,
-                bbox=dict(boxstyle="round", fc="white", ec="0.8"))
+                bbox=dict(boxstyle="round", fc=THEME["panel"], ec=THEME["grid"]))
         ax.set_xlabel(xlabel); ax.set_ylabel("Events / bin")
         ax.set_title(f"{title} — {a.title}")
         ax.legend(loc="upper right", fontsize=10)
@@ -404,16 +415,16 @@ class Plotter:
     # ---- 3) Charge analysis ανά ανάλυση ----
     def _charge_axes(self, ax_mu, ax_sd, a, fr):
         ax_mu.errorbar(fr["Q"], fr["Mu"], yerr=fr["Mu_error"], fmt=a.marker, ms=5, color=a.color,
-                       mfc="white" if a.marker != "o" else a.color, label=a.label, capsize=2)
+                       mfc=THEME["bg"] if a.marker != "o" else a.color, label=a.label, capsize=2)
         ax_sd.errorbar(fr["Q"], fr["Sigma"], yerr=fr["Sigma_error"], fmt=a.marker, ms=5, color=a.color,
-                       mfc="white" if a.marker != "o" else a.color, label=a.label, capsize=2)
+                       mfc=THEME["bg"] if a.marker != "o" else a.color, label=a.label, capsize=2)
 
     def _charge_figure(self, analyses, fname, title):
         fig, (ax_mu, ax_sd) = plt.subplots(2, 1, figsize=(9, 8), sharex=True,
                                            gridspec_kw=dict(height_ratios=[1, 1.4], hspace=0.06))
         for a in analyses:
             self._charge_axes(ax_mu, ax_sd, a, a.charge_frame)
-        ax_mu.axhline(0, color="0.4", lw=1)
+        ax_mu.axhline(0, color=THEME["zero"], lw=1)
         ax_mu.set_ylim(-self.bias_lim, self.bias_lim)
         ax_mu.set_ylabel("Bias μ [ps]")
         ax_sd.set_ylabel("Resolution σ [ps]")
@@ -426,7 +437,7 @@ class Plotter:
             fr = analyses[0].charge_frame
             ax_sd.text(0.98, 0.95, f"min σ = {fr['Sigma'].min():.2f} ps\n{analyses[0].events_per_charge_bin:,} events/point",
                        transform=ax_sd.transAxes, ha="right", va="top",
-                       bbox=dict(boxstyle="round", fc="white", ec="0.8"))
+                       bbox=dict(boxstyle="round", fc=THEME["panel"], ec=THEME["grid"]))
         self._save(fig, fname)
 
     def charge_analysis(self, a):
@@ -484,15 +495,15 @@ class Plotter:
         """hit_x/hit_y όλων των tracks, με τα παράθυρα της επιλογής."""
         D = a.Data_test
         fig, ax = plt.subplots(figsize=(11, 6.5))
-        h = ax.hist2d(D["hit_x"], D["hit_y"], bins=[260, 160], cmap="Greys", cmin=1)
+        h = ax.hist2d(D["hit_x"], D["hit_y"], bins=[260, 160], cmap="inferno", cmin=1)
         fig.colorbar(h[3], ax=ax, label="Tracks / bin")
         for x, y in zip(sel.xc, sel.yc):
             ax.add_patch(plt.Rectangle((x - sel.hw, y - sel.hw), 2 * sel.hw, 2 * sel.hw,
-                                       fill=False, ec="#d1495b", lw=2))
-            ax.plot(x, y, "+", color="#d1495b", ms=10, mew=2)
+                                       fill=False, ec="#4cc9b0", lw=2))
+            ax.plot(x, y, "+", color="#4cc9b0", ms=10, mew=2)
         ax.set_xlabel("hit_x [cm]"); ax.set_ylabel("hit_y [cm]")
         ax.set_aspect("equal"); ax.grid(False)
-        ax.set_title(f"Track positions ({a.label})\nred: {sel.describe()}", fontsize=12)
+        ax.set_title(f"Track positions ({a.label})\nboxes: {sel.describe()}", fontsize=12)
         self._save(fig, fname)
 
     def all(self):
@@ -519,15 +530,15 @@ if __name__ == "__main__":
         PicosecAnalysis("A1_nominal", "Train nominal / test nominal",
                         os.path.join(data_dir, "Check_threshold_cut_1_q_round2__Results.parquet"),
                         root_path=ROOT_NOMINAL, norm_ref_root=ROOT_NOMINAL, norm_ref_is_noisy=False,
-                        color="#1f5fa8", marker="o"),
+                        color=SCENARIO_COLORS["A1"], marker="o"),
         PicosecAnalysis("A2_train_nominal_test_noisy", "Train nominal / test noisy (10 mV)",
                         os.path.join(data_dir, "Check_threshold_cut_1_q_round2__Results_noisy_10mV_volcorr.parquet"),
                         root_path=ROOT_NOISY, norm_ref_root=ROOT_NOMINAL, norm_ref_is_noisy=False,
-                        color="#d1495b", marker="s"),
+                        color=SCENARIO_COLORS["A2"], marker="s"),
         PicosecAnalysis("A3_noisy_train", "Train noisy / test noisy (10 mV)",
                         os.path.join(data_dir, "Noizy_train__Results.parquet"),
                         root_path=ROOT_NOISY, norm_ref_root=ROOT_NOISY, norm_ref_is_noisy=True,
-                        color="#2a9d5c", marker="^"),
+                        color=SCENARIO_COLORS["A3"], marker="^"),
     ]
     analyses = [a for a in analyses if os.path.exists(a.results_path)]
 
