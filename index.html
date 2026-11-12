@@ -425,8 +425,8 @@
        times are used in ns without normalisation.</p>
     <p>The network has five hidden layers of 32 ReLU units (≈4.8k parameters) and two outputs, the predicted time μ and
        log σ², so that every event gets its own time estimate and uncertainty. It is trained by minimising the Gaussian
-       negative log-likelihood, <span class="math">L = ½[(t − μ)²/σ² + log σ² + log 2π]</span>, with Adam (learning rate 10<sup>−3</sup>),
-       batch size 512, up to 1000 epochs and early stopping with patience 50, keeping the best weights.</p>
+       negative log-likelihood, <span class="math">L = ½[(t − μ)²/σ² + log σ² + log 2π]</span>, with Adam (learning rate 10<sup>−3</sup>)
+       and batch size 512, for up to 1000 epochs.</p>
     <h3>Target</h3>
     <p>For each event a random offset t<sub>true</sub> ~ U(−1, 1)&nbsp;ns is added to all four pad times, and the network
        is trained to predict this offset from the shifted times and the pad amplitudes. The residual μ − t<sub>true</sub>
@@ -434,8 +434,14 @@
        charge-dependent (time-walk) and charge-sharing corrections it learns.</p>
     <h3>Training, validation and test</h3>
     <p>The data are shuffled and split with 10-fold cross-validation. In each fold, 90% of the events are used for
-       training (of which 20% are held out for validation and early stopping) and the remaining 10% for testing, i.e.
-       72% / 18% / 10% per fold. Each event is tested exactly once, by the model that did not see it in training, so the
+       training (of which 20% are held out as a validation set) and the remaining 10% for testing, i.e.
+       72% / 18% / 10% per fold.</p>
+    <p>The model is selected on the validation set with <i>early stopping and model checkpointing</i>: after every epoch
+       the loss is evaluated on the validation set, and the network weights are saved only when this loss improves on the
+       best value so far. Training stops when the validation loss has not improved for 50 consecutive epochs, and the saved
+       best-validation weights are the ones used for testing. The validation events are never used for the weight updates,
+       and the test events are used neither for training nor for model selection.</p>
+    <p>Each event is tested exactly once, by the model that did not see it in training, so the
        results use the full data set (346k events nominal, 271k with 10&nbsp;mV noise after removing incomplete events).</p>
     <p>Three scenarios are studied: (A1) training and testing on nominal data; (A2) the ten nominal models applied to
        the noisy data, with the noisy amplitudes corrected for a per-pad voltage offset, normalised with the nominal
@@ -452,14 +458,17 @@
       <tr><td>Inputs</td><td>16 = 4 pads × (charge, e-peak amplitude, signal maximum, sigmoid time)</td></tr>
       <tr><td>Architecture</td><td>MLP, 5 × 32 ReLU, outputs μ and log σ²</td></tr>
       <tr><td>Loss</td><td>Gaussian negative log-likelihood (heteroscedastic)</td></tr>
-      <tr><td>Optimiser</td><td>Adam, lr 10<sup>−3</sup>, batch 512, ≤ 1000 epochs, early stopping (patience 50)</td></tr>
+      <tr><td>Optimiser</td><td>Adam, lr 10<sup>−3</sup>, batch 512, ≤ 1000 epochs</td></tr>
+      <tr><td>Model selection</td><td>Early stopping with checkpointing on the validation loss (patience 50, best weights kept)</td></tr>
       <tr><td>Target</td><td>t<sub>true</sub> ~ U(−1, 1) ns added to all pad times</td></tr>
       <tr><td>Validation</td><td>10-fold CV; per fold 72% train / 18% validation / 10% test</td></tr>
       <tr><td>Data</td><td>346,195 events (nominal), 271,320 events (10 mV noise)</td></tr>
     </tbody></table>
   </div>
-  <p class="note">Note for the analysers: in the nominal training (A1) early stopping and checkpointing monitored the training
-     loss; in the noisy training (A3) they monitored the validation loss. A2 uses t<sub>true</sub> ~ U(−0.5, 0.5) ns.</p>
+  <p class="note"><b style="color:var(--gold-hi)">Note for the analysers:</b> the text describes model selection on the validation loss,
+     which is what the noisy training (A3, <code>Noizy_train.py</code>) does. The nominal training used for A1 and A2
+     (<code>KFold_CV.py</code>) monitored the <i>training</i> loss (<code>monitor='nll_loss'</code>); it should be re-run with
+     <code>monitor='val_loss'</code> before the text is used as is. A2 uses t<sub>true</sub> ~ U(−0.5, 0.5) ns.</p>
 </div>
   </section>
 
