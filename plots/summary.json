@@ -2,6 +2,8 @@
   {
     "name": "A1_nominal",
     "label": "Train nominal / test nominal",
+    "selection": "All tracks",
+    "events_per_charge_point": 10000,
     "n_events_results": 346195,
     "charge_check_max_abs_diff": 2.1457672119140625e-05,
     "charge_check_median_abs_diff": 9.5367431640625e-07,
@@ -34,6 +36,8 @@
   {
     "name": "A2_train_nominal_test_noisy",
     "label": "Train nominal / test noisy (10 mV)",
+    "selection": "All tracks",
+    "events_per_charge_point": 10000,
     "n_events_results": 271320,
     "charge_check_max_abs_diff": 2.1457672119140625e-05,
     "charge_check_median_abs_diff": 9.5367431640625e-07,
@@ -66,6 +70,8 @@
   {
     "name": "A3_noisy_train",
     "label": "Train noisy / test noisy (10 mV)",
+    "selection": "All tracks",
+    "events_per_charge_point": 10000,
     "n_events_results": 271320,
     "charge_check_max_abs_diff": 2.1457672119140625e-05,
     "charge_check_median_abs_diff": 9.5367431640625e-07,
@@ -93,6 +99,111 @@
       "sigma_single": 1.0046782361802442,
       "mu_single": 0.007230805356143403,
       "rms": 0.9965498548323156
+    }
+  },
+  {
+    "name": "A1_nominal_centres",
+    "label": "Train nominal / test nominal",
+    "selection": "Pad centres (±1.25 mm)",
+    "events_per_charge_point": 1000,
+    "n_events_results": 346195,
+    "charge_check_max_abs_diff": 2.1457672119140625e-05,
+    "charge_check_median_abs_diff": 9.5367431640625e-07,
+    "frac_selected": 0.0413553055358974,
+    "pull_cut": 5.0,
+    "frac_removed_by_pull_cut": 0.0003492351749668776,
+    "n_events": 14312,
+    "resolution_ps": {
+      "mu": -0.8731388297174618,
+      "err_mu": 0.07892144760675938,
+      "sigma_core": 19.031627402329573,
+      "sigma_tail": NaN,
+      "frac_core": 1.0,
+      "sigma_tot": 19.031627402329573,
+      "sigma_single": 19.031627402329573,
+      "mu_single": -0.8731388297174618,
+      "rms": 18.884900296570958
+    },
+    "pull": {
+      "mu": -0.05185247025942231,
+      "err_mu": 0.006588767433476899,
+      "sigma_core": 0.9164327417108044,
+      "sigma_tail": 1.2024705767555566,
+      "frac_core": 0.800579647463161,
+      "sigma_tot": 0.9801606792478907,
+      "sigma_single": 0.9978972986404026,
+      "mu_single": -0.05073452744587456,
+      "rms": 0.9843889998902464
+    }
+  },
+  {
+    "name": "A2_train_nominal_test_noisy_centres",
+    "label": "Train nominal / test noisy (10 mV)",
+    "selection": "Pad centres (±1.25 mm)",
+    "events_per_charge_point": 1000,
+    "n_events_results": 271320,
+    "charge_check_max_abs_diff": 2.1457672119140625e-05,
+    "charge_check_median_abs_diff": 9.5367431640625e-07,
+    "frac_selected": 0.03791463954002654,
+    "pull_cut": 5.0,
+    "frac_removed_by_pull_cut": 0.02673276951492176,
+    "n_events": 10012,
+    "resolution_ps": {
+      "mu": 3.176741651711145,
+      "err_mu": 0.2243148760588315,
+      "sigma_core": 27.018653016869656,
+      "sigma_tail": 50.406643922765824,
+      "frac_core": 0.8239675336868623,
+      "sigma_tot": 32.384735576034984,
+      "sigma_single": 30.072072262421745,
+      "mu_single": 3.106752270190487,
+      "rms": 33.62542072671492
+    },
+    "pull": {
+      "mu": 0.11950245817618917,
+      "err_mu": 0.013558643555169277,
+      "sigma_core": 1.2814386581251267,
+      "sigma_tail": 3.1686521071077864,
+      "frac_core": 0.8864901946366959,
+      "sigma_tot": 1.6110155670195758,
+      "sigma_single": 1.3592161850717983,
+      "mu_single": 0.1148915953562178,
+      "rms": 1.4341182441318054
+    }
+  },
+  {
+    "name": "A3_noisy_train_centres",
+    "label": "Train noisy / test noisy (10 mV)",
+    "selection": "Pad centres (±1.25 mm)",
+    "events_per_charge_point": 1000,
+    "n_events_results": 271320,
+    "charge_check_max_abs_diff": 2.1457672119140625e-05,
+    "charge_check_median_abs_diff": 9.5367431640625e-07,
+    "frac_selected": 0.03791463954002654,
+    "pull_cut": 5.0,
+    "frac_removed_by_pull_cut": 0.0004860503548167472,
+    "n_events": 10282,
+    "resolution_ps": {
+      "mu": -2.5027975201954784,
+      "err_mu": 0.37656438840002454,
+      "sigma_core": 32.2962747157407,
+      "sigma_tail": NaN,
+      "frac_core": 1.0,
+      "sigma_tot": 32.2962747157407,
+      "sigma_single": 32.2962747157407,
+      "mu_single": -2.5027975201954784,
+      "rms": 33.781919228823995
+    },
+    "pull": {
+      "mu": -0.07862283962530056,
+      "err_mu": 0.007780174149119071,
+      "sigma_core": 0.9427157962493877,
+      "sigma_tail": NaN,
+      "frac_core": 1.0,
+      "sigma_tot": 0.9427157962493877,
+      "sigma_single": 0.9427157962493877,
+      "mu_single": -0.07862283962530056,
+      "rms": 0.9388272735581462
     }
   }
 ]

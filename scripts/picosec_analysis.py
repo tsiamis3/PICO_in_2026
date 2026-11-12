@@ -106,7 +106,7 @@ class GaussFitter:
                     data=data2, fit=f2)
 
     @classmethod
-    def double(cls, data, nbins):
+    def double(cls, data, nbins, min_frac=0.10):
         """
         fit_gaus2_double: single fit -> δεδομένα στο ±5σ -> double Gaussian (κοινό mean).
         σ_tot = sqrt(f1 σ1² + f2 σ2²), με f_i τα κλάσματα ΕΜΒΑΔΟΥ (a_i σ_i).
@@ -128,10 +128,45 @@ class GaussFitter:
         f1, f2 = w1 / (w1 + w2), w2 / (w1 + w2)
         sig_tot = np.sqrt(f1 * sg1 ** 2 + f2 * sg2 ** 2)
         perr = np.sqrt(np.abs(np.diag(pcov)))
-        return dict(mu=mu, err_mu=perr[1], sigma_core=sg1, sigma_tail=sg2, frac_core=f1,
+        if min(f1, f2) < min_frac:
+            # Η δεύτερη Gaussian δεν χρειάζεται (εκφυλισμένο fit, συνήθως σε μικρή στατιστική):
+            # κρατάμε τη single Gaussian στο ±5σ.
+            f = s1["fit"]
+            a0, mu, sg = f["popt"]
+            a0 = a0 * (edges[1] - edges[0]) / (f["edges"][1] - f["edges"][0])   # ίδιο binning με το plot
+            return dict(mu=mu, err_mu=s1["err_mu"], sigma_core=sg, sigma_tail=np.nan, frac_core=1.0,
+                        sigma_tot=sg, sigma_single=sg, mu_single=mu, rms=np.std(d), n_events=len(d),
+                        hist=dict(n=n, edges=edges), popt=(a0, mu, sg, 0.0, sg), single=True)
+        return dict(mu=mu, err_mu=perr[1], sigma_core=sg1, sigma_tail=sg2, frac_core=f1, single=False,
                     sigma_tot=sig_tot, sigma_single=s1["sigma"], mu_single=s1["mu"],
                     rms=np.std(d), n_events=len(d),
                     hist=dict(n=n, edges=edges), popt=(a1, mu, sg1, a2, sg2))
+
+
+# =====================================================================================
+# Επιλογή: tracks στα κέντρα των pads
+# =====================================================================================
+class PadCenterSelection:
+    """
+    Κρατά τα tracks με |hit_x - x_c| <= half_width ΚΑΙ |hit_y - y_c| <= half_width για κάποιο κέντρο pad
+    (τετράγωνο παράθυρο). hit_x, hit_y σε cm.
+    """
+    def __init__(self, x_centers, y_centers, half_width_cm=0.125):
+        self.xc, self.yc = np.asarray(x_centers, float), np.asarray(y_centers, float)
+        self.hw = half_width_cm
+        # heatmap: ένα κελί ανά κέντρο pad (3 στήλες x 2 γραμμές)
+        xs, ys = np.unique(self.xc), np.unique(self.yc)
+        self.x_edges = np.concatenate([[xs[0] - 0.5], 0.5 * (xs[1:] + xs[:-1]), [xs[-1] + 0.5]])
+        self.y_edges = np.concatenate([[ys[0] - 0.5], 0.5 * (ys[1:] + ys[:-1]), [ys[-1] + 0.5]])
+
+    def __call__(self, D):
+        m = np.zeros(len(D), dtype=bool)
+        for x, y in zip(self.xc, self.yc):
+            m |= (np.abs(D["hit_x"] - x) <= self.hw).values & (np.abs(D["hit_y"] - y) <= self.hw).values
+        return m
+
+    def describe(self):
+        return f"|Δx|, |Δy| ≤ {10*self.hw:.2f} mm from a pad centre"
 
 
 # =====================================================================================
@@ -146,8 +181,12 @@ class PicosecAnalysis:
 
     def __init__(self, name, label, results_path, root_path, norm_ref_root, norm_ref_is_noisy,
                  thres=1.0, pull_cut=5.0, events_per_charge_bin=10000,
-                 x_edges=None, y_edges=None, min_hits=200, color="C0", marker="o"):
+                 x_edges=None, y_edges=None, min_hits=200, color="C0", marker="o",
+                 selection=None, selection_label="All tracks"):
         self.name, self.label = name, label
+        self.selection, self.selection_label = selection, selection_label
+        if selection is not None and x_edges is None:
+            x_edges, y_edges = selection.x_edges, selection.y_edges
         self.results_path, self.root_path = results_path, root_path
         self.norm_ref_root, self.norm_ref_is_noisy = norm_ref_root, norm_ref_is_noisy
         self.thres, self.pull_cut = thres, pull_cut
@@ -156,7 +195,12 @@ class PicosecAnalysis:
         self.y_edges = np.linspace(-0.8, 0.8, 6) if y_edges is None else y_edges
         self.min_hits = min_hits
         self.color, self.marker = color, marker
-        self.summary = {"name": name, "label": label}
+        self.summary = {"name": name, "label": label, "selection": selection_label,
+                        "events_per_charge_point": events_per_charge_bin}
+
+    @property
+    def title(self):
+        return self.label if self.selection is None else f"{self.label} · pad centres"
 
     # ---------------- Φόρτωση ----------------
     @staticmethod
@@ -211,6 +255,10 @@ class PicosecAnalysis:
         Data_test["tt_ps"] = Data_test["tt"] * NS_TO_PS
         Data_test["std_ps"] = Data_test["std_network"] * NS_TO_PS
         Data_test["pull"] = Data_test["tt"] / Data_test["std_network"]
+        if self.selection is not None:
+            m = self.selection(Data_test)
+            self.summary["frac_selected"] = float(m.mean())
+            Data_test = Data_test[m].copy()
         n0 = len(Data_test)
         Data_test = Data_test[Data_test["pull"].abs() < self.pull_cut].copy()
         self.summary["pull_cut"] = self.pull_cut
@@ -291,8 +339,10 @@ class Plotter:
     """Όλα τα plots, με κοινά όρια μεταξύ αναλύσεων."""
 
     def __init__(self, analyses, out_dir, bias_lim_ps=10.0, q_unit="",
-                 pull_bias_lim=0.5, pull_sd_lim=(0.0, 2.0)):
+                 pull_bias_lim=0.5, pull_sd_lim=(0.0, 2.0), sd_lim=None, suffix="", comparison_title=None):
         self.analyses, self.out_dir = analyses, out_dir
+        self.suffix = suffix
+        self.comparison_title = comparison_title or "Bias and resolution vs charge — comparison"
         self.bias_lim = bias_lim_ps
         self.q_label = "Total charge Q" + (f" [{q_unit}]" if q_unit else "")
         self.pull_bias_lim, self.pull_sd_lim = pull_bias_lim, pull_sd_lim
@@ -300,8 +350,10 @@ class Plotter:
         plt.rcParams.update({"font.size": 12, "axes.grid": True, "grid.alpha": 0.3,
                              "axes.spines.top": False, "axes.spines.right": False})
         # κοινή κλίμακα για τα std heatmaps (ps)
-        sds = np.concatenate([a.map_tt["sd"].ravel() for a in analyses])
-        self.sd_lim = (np.floor(np.nanmin(sds)), np.ceil(np.nanmax(sds)))
+        if sd_lim is None:
+            sds = np.concatenate([a.map_tt["sd"].ravel() for a in analyses])
+            sd_lim = (np.floor(np.nanmin(sds)), np.ceil(np.nanmax(sds)))
+        self.sd_lim = sd_lim
 
     def _save(self, fig, fname):
         for ext in ("png", "pdf"):
@@ -316,20 +368,25 @@ class Plotter:
         ax.stairs(n, edges, color="0.35", fill=True, alpha=0.35, label="Data")
         a1, mu, s1, a2, s2 = res["popt"]
         xf = np.linspace(edges[0], edges[-1], 1000)
-        ax.plot(xf, double_gaus(xf, *res["popt"]), color=a.color, lw=2, label="Double Gaussian")
-        ax.plot(xf, gaus(xf, a1, mu, s1), "--", color=a.color, lw=1.2, alpha=0.8, label="core")
-        ax.plot(xf, gaus(xf, a2, mu, s2), ":", color=a.color, lw=1.2, alpha=0.8, label="tail")
         fmt = "{:.2f}" if unit == "ps" else "{:.3f}"
         u = f" {unit}" if unit else ""
-        txt = (f"μ = {fmt.format(res['mu'])}{u}\n"
-               f"σ_core = {fmt.format(res['sigma_core'])}{u} ({100*res['frac_core']:.0f}%)\n"
-               f"σ_tail = {fmt.format(res['sigma_tail'])}{u}\n"
-               f"σ_tot = {fmt.format(res['sigma_tot'])}{u}\n"
-               f"N = {res['n_events']:,}")
+        if res.get("single"):
+            ax.plot(xf, gaus(xf, a1, mu, s1), color=a.color, lw=2, label="Gaussian")
+            txt = (f"μ = {fmt.format(res['mu'])}{u}\nσ = {fmt.format(res['sigma_tot'])}{u}\n"
+                   f"N = {res['n_events']:,}\n(single Gaussian:\n 2nd component < 10%)")
+        else:
+            ax.plot(xf, double_gaus(xf, *res["popt"]), color=a.color, lw=2, label="Double Gaussian")
+            ax.plot(xf, gaus(xf, a1, mu, s1), "--", color=a.color, lw=1.2, alpha=0.8, label="core")
+            ax.plot(xf, gaus(xf, a2, mu, s2), ":", color=a.color, lw=1.2, alpha=0.8, label="tail")
+            txt = (f"μ = {fmt.format(res['mu'])}{u}\n"
+                   f"σ_core = {fmt.format(res['sigma_core'])}{u} ({100*res['frac_core']:.0f}%)\n"
+                   f"σ_tail = {fmt.format(res['sigma_tail'])}{u}\n"
+                   f"σ_tot = {fmt.format(res['sigma_tot'])}{u}\n"
+                   f"N = {res['n_events']:,}")
         ax.text(0.02, 0.97, txt, transform=ax.transAxes, va="top", ha="left", fontsize=11,
                 bbox=dict(boxstyle="round", fc="white", ec="0.8"))
         ax.set_xlabel(xlabel); ax.set_ylabel("Events / bin")
-        ax.set_title(f"{title} — {a.label}")
+        ax.set_title(f"{title} — {a.title}")
         ax.legend(loc="upper right", fontsize=10)
         lim = max(abs(mu - 5 * res["sigma_tot"]), abs(mu + 5 * res["sigma_tot"]))
         lim = min(lim, max(abs(edges[0]), abs(edges[-1])))     # όχι πέρα από τα δεδομένα
@@ -373,11 +430,10 @@ class Plotter:
         self._save(fig, fname)
 
     def charge_analysis(self, a):
-        self._charge_figure([a], f"{a.name}_3_charge_analysis", f"Charge analysis — {a.label}")
+        self._charge_figure([a], f"{a.name}_3_charge_analysis", f"Charge analysis — {a.title}")
 
     def charge_comparison(self):
-        self._charge_figure(self.analyses, "comparison_charge_analysis",
-                            "Bias and resolution vs charge — comparison")
+        self._charge_figure(self.analyses, f"comparison_charge_analysis{self.suffix}", self.comparison_title)
 
     # ---- 4, 5) Heatmaps ----
     def _heatmap_pair(self, a, m, fname, what, unit, mu_lim, sd_norm, sd_cmap, fmt):
@@ -399,14 +455,19 @@ class Plotter:
                         continue
                     r, g, b, _ = cmap(norm(v))
                     lum = 0.299 * r + 0.587 * g + 0.114 * b
-                    ax.text(xc[i], yc[j], fmt.format(v), ha="center", va="center", fontsize=10,
+                    label = fmt.format(v) + (f"\nN = {m['n'][j, i]:,}" if a.selection is not None else "")
+                    ax.text(xc[i], yc[j], label, ha="center", va="center", fontsize=10 if a.selection is None else 13,
                             fontweight="bold", color="black" if lum > 0.5 else "white")
-            ax.set_title(f"{title} — {a.label}")
+            ax.set_title(f"{title} — {a.title}")
             ax.set_xlabel("hit_x"); ax.set_ylabel("hit_y")
-            ax.set_xticks(x_e); ax.set_yticks(y_e)
-            ax.tick_params(labelsize=9)
             ax.grid(False)
-            plt.setp(ax.get_xticklabels(), rotation=45)
+            if a.selection is None:
+                ax.set_xticks(x_e); ax.set_yticks(y_e)
+                ax.tick_params(labelsize=9)
+                plt.setp(ax.get_xticklabels(), rotation=45)
+            else:   # ένα κελί ανά κέντρο pad: ticks στα κέντρα
+                ax.set_xticks(xc); ax.set_yticks(yc)
+                ax.set_xlabel("pad centre hit_x [cm]"); ax.set_ylabel("pad centre hit_y [cm]")
         fig.tight_layout()
         self._save(fig, fname)
 
@@ -418,6 +479,21 @@ class Plotter:
         lo, hi = self.pull_sd_lim
         self._heatmap_pair(a, a.map_pull, f"{a.name}_5_heatmap_pull", "pull", "",
                            self.pull_bias_lim, plt.Normalize(lo, hi), "PiYG_r", "{:.2f}")
+
+    def selection_map(self, a, sel, fname="selection_pad_centres"):
+        """hit_x/hit_y όλων των tracks, με τα παράθυρα της επιλογής."""
+        D = a.Data_test
+        fig, ax = plt.subplots(figsize=(11, 6.5))
+        h = ax.hist2d(D["hit_x"], D["hit_y"], bins=[260, 160], cmap="Greys", cmin=1)
+        fig.colorbar(h[3], ax=ax, label="Tracks / bin")
+        for x, y in zip(sel.xc, sel.yc):
+            ax.add_patch(plt.Rectangle((x - sel.hw, y - sel.hw), 2 * sel.hw, 2 * sel.hw,
+                                       fill=False, ec="#d1495b", lw=2))
+            ax.plot(x, y, "+", color="#d1495b", ms=10, mew=2)
+        ax.set_xlabel("hit_x [cm]"); ax.set_ylabel("hit_y [cm]")
+        ax.set_aspect("equal"); ax.grid(False)
+        ax.set_title(f"Track positions ({a.label})\nred: {sel.describe()}", fontsize=12)
+        self._save(fig, fname)
 
     def all(self):
         for a in self.analyses:
@@ -455,15 +531,33 @@ if __name__ == "__main__":
     ]
     analyses = [a for a in analyses if os.path.exists(a.results_path)]
 
-    for a in analyses:
-        print(f"\n===== {a.label} =====")
+    # ---- Ίδιες αναλύσεις, μόνο για tracks στα κέντρα των pads ----
+    pad_centres = PadCenterSelection(x_centers=[1.002, 1.002, 0, 0, -1.002, -1.002],
+                                     y_centers=[0.501, -0.501, 0.501, -0.501, 0.501, -0.501],
+                                     half_width_cm=0.125)          # ±1.25 mm
+    analyses_c = [PicosecAnalysis(a.name + "_centres", a.label, a.results_path, a.root_path, a.norm_ref_root,
+                                  a.norm_ref_is_noisy, events_per_charge_bin=1000, color=a.color, marker=a.marker,
+                                  selection=pad_centres, selection_label="Pad centres (±1.25 mm)")
+                  for a in analyses]
+
+    for a in analyses + analyses_c:
+        print(f"\n===== {a.title} =====")
         a.run()
         print(json.dumps(a.summary, indent=2, ensure_ascii=False))
 
-    P = Plotter(analyses, out_dir, bias_lim_ps=10.0, q_unit="")
+    # κοινή κλίμακα std για όλα τα heatmaps (όλα τα tracks + κέντρα)
+    sds = np.concatenate([a.map_tt["sd"].ravel() for a in analyses + analyses_c])
+    sd_lim = (np.floor(np.nanmin(sds)), np.ceil(np.nanmax(sds)))
+
+    P = Plotter(analyses, out_dir, bias_lim_ps=10.0, q_unit="", sd_lim=sd_lim)
     P.all()
-    for a in analyses:
+    P.selection_map(analyses[0], pad_centres)
+    Pc = Plotter(analyses_c, out_dir, bias_lim_ps=10.0, q_unit="", sd_lim=sd_lim, suffix="_centres",
+                 comparison_title="Bias and resolution vs charge — pad centres (±1.25 mm)")
+    Pc.all()
+
+    for a in analyses + analyses_c:
         a.charge_frame.to_csv(os.path.join(out_dir, f"{a.name}_charge_analysis.csv"), index=False)
     with open(os.path.join(out_dir, "summary.json"), "w") as f:
-        json.dump([a.summary for a in analyses], f, indent=2, ensure_ascii=False)
+        json.dump([a.summary for a in analyses + analyses_c], f, indent=2, ensure_ascii=False)
     print("\nPlots ->", out_dir)

@@ -18,13 +18,19 @@ STYLE = {  # ίδια χρώματα με τα PNG
     "A2_train_nominal_test_noisy": ("#d1495b", "square-open"),
     "A3_noisy_train": ("#2a9d5c", "triangle-up-open"),
 }
+for k in list(STYLE):
+    STYLE[k + "_centres"] = STYLE[k]
 SHORT = {"A1_nominal": "A1", "A2_train_nominal_test_noisy": "A2", "A3_noisy_train": "A3"}
+for k in list(SHORT):
+    SHORT[k + "_centres"] = SHORT[k]
+SEL = lambda a: "c" if a["name"].endswith("_centres") else "all"
+SEL_TITLE = {"all": "All tracks", "c": "Pad centres (±1.25 mm)"}
 PLOT_KINDS = [
     ("1_total_resolution", "Total resolution", "Double-Gaussian fit of t<sub>network</sub> − t<sub>true</sub>."),
     ("2_pulls", "Pulls", "(t<sub>network</sub> − t<sub>true</sub>) / σ<sub>network</sub>; a well-calibrated network gives σ ≈ 1."),
-    ("3_charge_analysis", "Charge analysis", "Events sorted by total charge Q, 10,000 events per point, Gaussian fit per point."),
-    ("4_heatmap_tt", "Heatmaps: bias and std", "Gaussian fit of t<sub>network</sub> − t<sub>true</sub> per (hit_x, hit_y) cell (≥ 200 hits)."),
-    ("5_heatmap_pull", "Heatmaps: pull bias and std", "Gaussian fit of the pull per (hit_x, hit_y) cell (≥ 200 hits)."),
+    ("3_charge_analysis", "Charge analysis", "Events sorted by total charge Q, {epp:,} events per point, Gaussian fit per point."),
+    ("4_heatmap_tt", "Heatmaps: bias and std", "Gaussian fit of t<sub>network</sub> − t<sub>true</sub> per {cell} (≥ 200 hits)."),
+    ("5_heatmap_pull", "Heatmaps: pull bias and std", "Gaussian fit of the pull per {cell} (≥ 200 hits)."),
 ]
 
 
@@ -36,16 +42,19 @@ def img(fname, alt):
 
 # ---------------- Πίνακας σύνοψης ----------------
 rows = []
-for a in analyses:
-    r, p = a["resolution_ps"], a["pull"]
-    c = STYLE[a["name"]][0]
-    rows.append(f"""<tr>
+for sel in ("all", "c"):
+    rows.append(f'<tr class="group"><td colspan="11">{SEL_TITLE[sel]}</td></tr>')
+    for a in [a for a in analyses if SEL(a) == sel]:
+        r, p = a["resolution_ps"], a["pull"]
+        c = STYLE[a["name"]][0]
+        rows.append(f"""<tr>
       <td><span class="dot" style="background:{c}"></span><b>{SHORT[a['name']]}</b> {html.escape(a['label'])}</td>
       <td class="num">{a['n_events']:,}</td>
       <td class="num">{r['sigma_core']:.1f}</td>
-      <td class="num">{r['sigma_tail']:.1f}</td>
+      <td class="num">{'–' if r['sigma_tail'] != r['sigma_tail'] else f"{r['sigma_tail']:.1f}"}</td>
       <td class="num">{100*r['frac_core']:.0f}%</td>
       <td class="num"><b>{r['sigma_tot']:.1f}</b></td>
+      <td class="num">{r['sigma_single']:.1f}</td>
       <td class="num">{r['mu']:+.1f}</td>
       <td class="num">{p['sigma_tot']:.2f}</td>
       <td class="num">{p['mu']:+.3f}</td>
@@ -65,6 +74,7 @@ for a in analyses:
             customdata=fr[["Q_min", "Q_max", "N"]].round(2).values.tolist(),
             mode="markers", marker=dict(color=c, symbol=sym, size=7, line=dict(color=c, width=1.5)),
             name=a["label"], legendgroup=a["name"], showlegend=(yaxis == "y2"), yaxis=yaxis,
+            meta=SEL(a), visible=(SEL(a) == "all"),
             hovertemplate=("<b>%{fullData.name}</b><br>Q = %{x:.1f} (range %{customdata[0]:.1f}–%{customdata[1]:.1f})"
                            "<br>" + ("bias" if y == "Mu" else "σ") + " = %{y:.2f} ± %{error_y.array:.2f} ps"
                            "<br>N = %{customdata[2]:,}<extra></extra>"),
@@ -73,28 +83,38 @@ for a in analyses:
 # ---------------- Ενότητες ανά ανάλυση ----------------
 sections = []
 for a in analyses:
+    sel, sid = SEL(a), SHORT[a["name"]].lower() + ("c" if SEL(a) == "c" else "")
+    cell = "pad centre" if sel == "c" else "(hit_x, hit_y) cell"
     figs = []
+    if sel == "c":
+        figs.append(f"""<figure class="wide">
+          <figcaption><h3>Selection</h3><p>Track positions (nominal data) and the six ±1.25&nbsp;mm windows around the pad centres.</p></figcaption>
+          {img("selection_pad_centres.png", "Pad centre selection")}
+        </figure>""")
     for kind, title, cap in PLOT_KINDS:
-        figs.append(f"""<figure class="{'wide' if 'heatmap' in kind else ''}">
+        cap = cap.format(epp=a["events_per_charge_point"], cell=cell)
+        figs.append(f"""<figure class="{'wide' if 'heatmap' in kind and sel == 'all' else ''}">
           <figcaption><h3>{title}</h3><p>{cap}</p></figcaption>
           {img(f"{a['name']}_{kind}.png", f"{title} — {a['label']}")}
         </figure>""")
     r = a["resolution_ps"]
-    sections.append(f"""<section class="analysis" id="{SHORT[a['name']].lower()}" data-tab="{SHORT[a['name']]}">
+    extra = f"<div><span>selected</span><b>{100*a['frac_selected']:.1f}%</b></div>" if sel == "c" else ""
+    sections.append(f"""<section class="analysis" id="{sid}">
       <div class="kpis">
         <div><span>σ<sub>tot</sub></span><b>{r['sigma_tot']:.1f} ps</b></div>
         <div><span>σ<sub>core</sub></span><b>{r['sigma_core']:.1f} ps</b></div>
         <div><span>bias</span><b>{r['mu']:+.1f} ps</b></div>
         <div><span>σ(pull)</span><b>{a['pull']['sigma_tot']:.2f}</b></div>
-        <div><span>events</span><b>{a['n_events']:,}</b></div>
+        <div><span>events</span><b>{a['n_events']:,}</b></div>{extra}
       </div>
       <div class="grid">{''.join(figs)}</div>
     </section>""")
 
+seltoggle = ''.join(f'<button class="seg" data-sel="{k}">{v}</button>' for k, v in SEL_TITLE.items())
 tabs = "".join(
     f'<button class="tab" data-target="{SHORT[a["name"]].lower()}">'
     f'<span class="dot" style="background:{STYLE[a["name"]][0]}"></span>{SHORT[a["name"]]} · {html.escape(a["label"])}</button>'
-    for a in analyses)
+    for a in analyses if SEL(a) == "all")
 
 page = f"""<!DOCTYPE html>
 <html lang="en">
@@ -131,8 +151,14 @@ page = f"""<!DOCTYPE html>
   .tab {{ font:500 14px Inter,sans-serif; border:1px solid var(--line); background:#fff; color:var(--ink); padding:9px 14px; border-radius:8px; cursor:pointer; }}
   .tab.active {{ background:var(--ink); color:#fff; border-color:var(--ink); }}
   .analysis {{ display:none; padding-top:18px; }}
+  tr.group td {{ background:#f1f2f0; font-weight:600; font-size:13px; color:var(--muted); padding:7px 12px; }}
+  .segs {{ display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; }}
+  .seg {{ font:500 14px Inter,sans-serif; border:none; background:#fff; color:var(--ink); padding:9px 14px; cursor:pointer; }}
+  .seg + .seg {{ border-left:1px solid var(--line); }}
+  .seg.active {{ background:#1f5fa8; color:#fff; }}
+  .controls {{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; }}
   .analysis.active {{ display:block; }}
-  .kpis {{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px; }}
+  .kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px; }}
   .kpis div {{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:12px 14px; }}
   .kpis span {{ display:block; color:var(--muted); font-size:12.5px; }}
   .kpis b {{ font:600 22px 'JetBrains Mono',monospace; }}
@@ -165,19 +191,20 @@ page = f"""<!DOCTYPE html>
      σ<sub>tot</sub> = √(f<sub>core</sub>σ<sub>core</sub>² + f<sub>tail</sub>σ<sub>tail</sub>²), with area fractions.</p>
   <div class="card scroll"><table>
     <thead><tr><th>Scenario</th><th class="num">Events</th><th class="num">σ<sub>core</sub> [ps]</th><th class="num">σ<sub>tail</sub> [ps]</th>
-      <th class="num">f<sub>core</sub></th><th class="num">σ<sub>tot</sub> [ps]</th><th class="num">Bias [ps]</th>
+      <th class="num">f<sub>core</sub></th><th class="num">σ<sub>tot</sub> [ps]</th><th class="num">σ<sub>single</sub> [ps]</th><th class="num">Bias [ps]</th>
       <th class="num">σ(pull)</th><th class="num">μ(pull)</th><th class="num">Removed by pull cut</th></tr></thead>
     <tbody>{table}</tbody>
   </table></div>
 
   <h2>Bias and resolution vs charge</h2>
   <p class="lead">All three scenarios on common axes. Bias range fixed to ±10&nbsp;ps. Hover a point for its charge range and number of events;
-     click a legend entry to hide a scenario.</p>
-  <div class="card"><div id="chargePlot"></div></div>
+     click a legend entry to hide a scenario. Pad-centre points use 1,000 events each (10,000 for all tracks).</p>
+  <div class="segs" id="chargeSel">{seltoggle}</div>
+  <div class="card" style="margin-top:10px"><div id="chargePlot"></div></div>
 
   <h2>Per-scenario results</h2>
   <p class="lead">Click any plot to enlarge it. Std heatmaps share one colour scale across scenarios, so the colours compare directly.</p>
-  <nav class="tabs">{tabs}</nav>
+  <nav class="tabs controls"><div style="display:flex;gap:8px;flex-wrap:wrap">{tabs}</div><div class="segs" id="secSel">{seltoggle}</div></nav>
   {''.join(sections)}
 
   <h2>Method notes</h2>
@@ -191,7 +218,11 @@ page = f"""<!DOCTYPE html>
         predicted variance and the spread between models.</li>
     <li><b>Fits.</b> Two-pass Gaussian (second pass within ±5σ, binning with best R²). Total resolution and pulls use a double Gaussian
         with a common mean. Heatmap cells need at least 200 hits.</li>
-    <li><b>Selection.</b> |pull| &lt; 5 in all scenarios.</li>
+    <li><b>Selection.</b> |pull| &lt; 5 in all scenarios. <i>Pad centres:</i> tracks with |hit_x − x<sub>c</sub>| ≤ 1.25&nbsp;mm and
+        |hit_y − y<sub>c</sub>| ≤ 1.25&nbsp;mm for one of the six pad centres x<sub>c</sub> ∈ {{−1.002, 0, 1.002}}&nbsp;cm,
+        y<sub>c</sub> ∈ {{−0.501, 0.501}}&nbsp;cm (square windows). With these statistics the double Gaussian can be unstable,
+        so σ<sub>single</sub> (single Gaussian within ±5σ) is given as well. When the second Gaussian carries less than 10% of the area,
+        the fit falls back to a single Gaussian (shown as f<sub>core</sub> = 100%, σ<sub>tail</sub> = –).</li>
   </ul></div>
 
   <footer>PICOSEC Micromegas Collaboration · AUTh · Generated with <code>picosec_analysis.py</code> and <code>build_page.py</code>.</footer>
@@ -200,17 +231,26 @@ page = f"""<!DOCTYPE html>
 <div id="lightbox"><img alt=""></div>
 
 <script>
-  // ---- Tabs ----
+  // ---- Tabs (σενάριο) + επιλογή (όλα / κέντρα) ----
   const tabs = document.querySelectorAll('.tab');
   const secs = document.querySelectorAll('.analysis');
-  function show(id) {{
-    tabs.forEach(t => t.classList.toggle('active', t.dataset.target === id));
-    secs.forEach(s => s.classList.toggle('active', s.id === id));
+  let cur = {{ id:'a1', sel:'all' }};
+  function show() {{
+    const sid = cur.id + (cur.sel === 'c' ? 'c' : '');
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.target === cur.id));
+    document.querySelectorAll('#secSel .seg').forEach(b => b.classList.toggle('active', b.dataset.sel === cur.sel));
+    secs.forEach(s => s.classList.toggle('active', s.id === sid));
   }}
-  tabs.forEach(t => t.addEventListener('click', () => {{ show(t.dataset.target); history.replaceState(null, '', '#' + t.dataset.target); }}));
-  const start = (location.hash || '').slice(1);
-  show(['a1','a2','a3'].includes(start) ? start : 'a1');
-  window.addEventListener('hashchange', () => {{ const h = location.hash.slice(1); if (['a1','a2','a3'].includes(h)) show(h); }});
+  function fromHash() {{
+    const h = (location.hash || '').slice(1);
+    if (/^a[123]c?$/.test(h)) cur = {{ id:h.slice(0,2), sel: h.endsWith('c') ? 'c' : 'all' }};
+    show();
+  }}
+  const setHash = () => history.replaceState(null, '', '#' + cur.id + (cur.sel === 'c' ? 'c' : ''));
+  tabs.forEach(t => t.addEventListener('click', () => {{ cur.id = t.dataset.target; show(); setHash(); }}));
+  document.querySelectorAll('#secSel .seg').forEach(b => b.addEventListener('click', () => {{ cur.sel = b.dataset.sel; show(); setHash(); }}));
+  fromHash();
+  window.addEventListener('hashchange', fromHash);
 
   // ---- Lightbox ----
   const lb = document.getElementById('lightbox'), lbImg = lb.querySelector('img');
@@ -232,6 +272,13 @@ page = f"""<!DOCTYPE html>
   }};
   if (window.Plotly) {{
     Plotly.newPlot('chargePlot', traces, layout, {{ responsive:true, displaylogo:false }});
+    const segs = document.querySelectorAll('#chargeSel .seg');
+    const pick = sel => {{
+      segs.forEach(b => b.classList.toggle('active', b.dataset.sel === sel));
+      Plotly.restyle('chargePlot', {{ visible: traces.map(t => t.meta === sel) }});
+    }};
+    segs.forEach(b => b.addEventListener('click', () => pick(b.dataset.sel)));
+    segs[0].classList.add('active');
   }} else {{
     document.getElementById('chargePlot').innerHTML = '{img("comparison_charge_analysis.png", "Bias and resolution vs charge")}';
   }}
