@@ -158,7 +158,9 @@ page = f"""<!DOCTYPE html>
   a {{ color:var(--gold-hi); }}
   header {{ border-bottom:1px solid var(--line); background:
            radial-gradient(1200px 300px at 10% -20%, rgba(212,160,23,.18), transparent 60%), var(--bg); }}
-  header .wrap {{ max-width:1320px; margin:0 auto; padding:40px 24px 30px; }}
+  header .wrap {{ max-width:1320px; margin:0 auto; padding:40px 24px 30px; position:relative; }}
+  header .zipbtn {{ position:absolute; right:24px; top:40px; }}
+  @media (max-width:900px) {{ header .zipbtn {{ position:static; display:inline-block; margin:0 0 12px; }} }}
   .eyebrow {{ font:500 12px/1 'JetBrains Mono',monospace; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); }}
   h1 {{ font-size:34px; line-height:1.15; margin:12px 0 10px; letter-spacing:-.015em; }}
   h1 em {{ font-style:normal; color:var(--gold-hi); }}
@@ -235,16 +237,14 @@ page = f"""<!DOCTYPE html>
 <header><div class="wrap">
   <div class="eyebrow">PICOSEC Micromegas · 4-pad timing network</div>
   <h1>Timing resolution with a <em>heteroscedastic</em> neural network</h1>
+  <a class="zipbtn" href="plots_light.zip" download title="All plots, white background, PNG + PDF">⬇ All plots, white (zip)</a>
   <p>Out-of-fold (10-fold) predictions of the event time from per-pad charge, e-peak amplitude, signal maximum and fitted time,
      for nominal data and for data with 10&nbsp;mV noise. All times in picoseconds.</p>
 </div></header>
 
 <nav class="bar"><div class="wrap">
   <div class="tabs">{nav}</div>
-  <div style="display:flex;gap:10px;align-items:center">
-    <div class="segs" id="selToggle">{seltoggle}</div>
-    <a class="zipbtn" href="plots_light.zip" download title="All plots, white background, PNG + PDF">⬇ White plots (zip)</a>
-  </div>
+  <div class="segs" id="selToggle">{seltoggle}</div>
 </div></nav>
 
 <main>
@@ -293,6 +293,9 @@ page = f"""<!DOCTYPE html>
   <section class="tabpane" id="net-pane">
     <div class="pane-head"><h2>Network &amp; method</h2>
       <p>Short description of the network and of the training, validation and test procedure, for use in the paper.</p></div>
+    <figure style="margin-bottom:16px"><figcaption><h3 style="margin:0">Architecture</h3>
+      <span class="fig-kpi">16 → 5 × 32 ReLU → (μ, log σ²) · 4,834 parameters</span></figcaption>
+      {img("network_architecture.png", "Network architecture")}{dl("network_architecture")}</figure>
     {NET_SECTION}
   </section>
 
