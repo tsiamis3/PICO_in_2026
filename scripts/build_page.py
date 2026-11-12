@@ -110,11 +110,61 @@ for a in analyses:
       <div class="grid">{''.join(figs)}</div>
     </section>""")
 
+
+NET_SECTION = """<section class="analysis" id="net">
+  <div style="text-align:right;margin-bottom:8px"><button id="copyNet">Copy text</button></div>
+  <div class="card prose" id="netText">
+    <h3>Network</h3>
+    <p>The event time is reconstructed by a fully connected neural network with a heteroscedastic Gaussian output.
+       The input is a 16-dimensional vector: for each of the four readout pads, the e-peak charge (<code>qall</code>),
+       the e-peak amplitude (<code>epeak</code>), the signal maximum (<code>vol_max</code>) and the signal arrival time from a
+       sigmoid fit (<code>time_fit</code>). Pads with charge below 1 are treated as empty: their charge and amplitude are set to 0
+       and their time to a fixed out-of-range value. Charges, amplitudes and voltages are min-max normalised per variable;
+       times are used in ns without normalisation.</p>
+    <p>The network has five hidden layers of 32 ReLU units (≈4.8k parameters) and two outputs, the predicted time μ and
+       log σ², so that every event gets its own time estimate and uncertainty. It is trained by minimising the Gaussian
+       negative log-likelihood, <span class="math">L = ½[(t − μ)²/σ² + log σ² + log 2π]</span>, with Adam (learning rate 10<sup>−3</sup>),
+       batch size 512, up to 1000 epochs and early stopping with patience 50, keeping the best weights.</p>
+    <h3>Target</h3>
+    <p>For each event a random offset t<sub>true</sub> ~ U(−1, 1)&nbsp;ns is added to all four pad times, and the network
+       is trained to predict this offset from the shifted times and the pad amplitudes. The residual μ − t<sub>true</sub>
+       therefore measures how precisely the network combines the pad information into one event time, including the
+       charge-dependent (time-walk) and charge-sharing corrections it learns.</p>
+    <h3>Training, validation and test</h3>
+    <p>The data are shuffled and split with 10-fold cross-validation. In each fold, 90% of the events are used for
+       training (of which 20% are held out for validation and early stopping) and the remaining 10% for testing, i.e.
+       72% / 18% / 10% per fold. Each event is tested exactly once, by the model that did not see it in training, so the
+       results use the full data set (346k events nominal, 271k with 10&nbsp;mV noise after removing incomplete events).</p>
+    <p>Three scenarios are studied: (A1) training and testing on nominal data; (A2) the ten nominal models applied to
+       the noisy data, with the noisy amplitudes corrected for a per-pad voltage offset, normalised with the nominal
+       ranges, and combined as an ensemble (σ² = mean predicted variance + variance of the ten predictions);
+       (A3) training and testing on the noisy data with the same procedure as A1.</p>
+    <h3>Performance metrics</h3>
+    <p>The timing resolution is the width of μ − t<sub>true</sub> from a double-Gaussian fit, and the calibration of the
+       predicted uncertainty is checked with the pull (μ − t<sub>true</sub>)/σ, which should have unit width. Both are
+       studied as a function of the total charge and of the track position; events with |pull| &gt; 5 are removed.</p>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3 style="margin-bottom:8px">At a glance</h3>
+    <table class="facts"><tbody>
+      <tr><td>Inputs</td><td>16 = 4 pads × (charge, e-peak amplitude, signal maximum, sigmoid time)</td></tr>
+      <tr><td>Architecture</td><td>MLP, 5 × 32 ReLU, outputs μ and log σ²</td></tr>
+      <tr><td>Loss</td><td>Gaussian negative log-likelihood (heteroscedastic)</td></tr>
+      <tr><td>Optimiser</td><td>Adam, lr 10<sup>−3</sup>, batch 512, ≤ 1000 epochs, early stopping (patience 50)</td></tr>
+      <tr><td>Target</td><td>t<sub>true</sub> ~ U(−1, 1) ns added to all pad times</td></tr>
+      <tr><td>Validation</td><td>10-fold CV; per fold 72% train / 18% validation / 10% test</td></tr>
+      <tr><td>Data</td><td>346,195 events (nominal), 271,320 events (10 mV noise)</td></tr>
+    </tbody></table>
+  </div>
+  <p class="note">Note for the analysers: in the nominal training (A1) early stopping and checkpointing monitored the training
+     loss; in the noisy training (A3) they monitored the validation loss. A2 uses t<sub>true</sub> ~ U(−0.5, 0.5) ns.</p>
+</section>"""
+
 seltoggle = ''.join(f'<button class="seg" data-sel="{k}">{v}</button>' for k, v in SEL_TITLE.items())
 tabs = "".join(
     f'<button class="tab" data-target="{SHORT[a["name"]].lower()}">'
     f'<span class="dot" style="background:{STYLE[a["name"]][0]}"></span>{SHORT[a["name"]]} · {html.escape(a["label"])}</button>'
-    for a in analyses if SEL(a) == "all")
+    for a in analyses if SEL(a) == "all") + '<button class="tab" data-target="net">Network &amp; method</button>'
 
 page = f"""<!DOCTYPE html>
 <html lang="en">
@@ -151,6 +201,12 @@ page = f"""<!DOCTYPE html>
   .tab {{ font:500 14px Inter,sans-serif; border:1px solid var(--line); background:#fff; color:var(--ink); padding:9px 14px; border-radius:8px; cursor:pointer; }}
   .tab.active {{ background:var(--ink); color:#fff; border-color:var(--ink); }}
   .analysis {{ display:none; padding-top:18px; }}
+  .prose p {{ margin:6px 0 14px; max-width:860px; }}
+  .prose h3 {{ margin-top:6px; }}
+  .math {{ font-family:'JetBrains Mono',monospace; font-size:.9em; white-space:nowrap; }}
+  table.facts td:first-child {{ color:var(--muted); width:160px; font-weight:500; }}
+  p.note {{ color:var(--muted); font-size:13px; margin:12px 2px 0; max-width:860px; }}
+  #copyNet {{ font:500 13px Inter,sans-serif; border:1px solid var(--line); background:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; }}
   tr.group td {{ background:#f1f2f0; font-weight:600; font-size:13px; color:var(--muted); padding:7px 12px; }}
   .segs {{ display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; }}
   .seg {{ font:500 14px Inter,sans-serif; border:none; background:#fff; color:var(--ink); padding:9px 14px; cursor:pointer; }}
@@ -206,6 +262,7 @@ page = f"""<!DOCTYPE html>
   <p class="lead">Click any plot to enlarge it. Std heatmaps share one colour scale across scenarios, so the colours compare directly.</p>
   <nav class="tabs controls"><div style="display:flex;gap:8px;flex-wrap:wrap">{tabs}</div><div class="segs" id="secSel">{seltoggle}</div></nav>
   {''.join(sections)}
+  {NET_SECTION}
 
   <h2>Method notes</h2>
   <div class="card"><ul class="notes">
@@ -236,7 +293,8 @@ page = f"""<!DOCTYPE html>
   const secs = document.querySelectorAll('.analysis');
   let cur = {{ id:'a1', sel:'all' }};
   function show() {{
-    const sid = cur.id + (cur.sel === 'c' ? 'c' : '');
+    const sid = cur.id === 'net' ? 'net' : cur.id + (cur.sel === 'c' ? 'c' : '');
+    document.getElementById('secSel').style.visibility = cur.id === 'net' ? 'hidden' : 'visible';
     tabs.forEach(t => t.classList.toggle('active', t.dataset.target === cur.id));
     document.querySelectorAll('#secSel .seg').forEach(b => b.classList.toggle('active', b.dataset.sel === cur.sel));
     secs.forEach(s => s.classList.toggle('active', s.id === sid));
@@ -244,13 +302,21 @@ page = f"""<!DOCTYPE html>
   function fromHash() {{
     const h = (location.hash || '').slice(1);
     if (/^a[123]c?$/.test(h)) cur = {{ id:h.slice(0,2), sel: h.endsWith('c') ? 'c' : 'all' }};
+    else if (h === 'net') cur.id = 'net';
     show();
   }}
-  const setHash = () => history.replaceState(null, '', '#' + cur.id + (cur.sel === 'c' ? 'c' : ''));
+  const setHash = () => history.replaceState(null, '', '#' + (cur.id === 'net' ? 'net' : cur.id + (cur.sel === 'c' ? 'c' : '')));
   tabs.forEach(t => t.addEventListener('click', () => {{ cur.id = t.dataset.target; show(); setHash(); }}));
   document.querySelectorAll('#secSel .seg').forEach(b => b.addEventListener('click', () => {{ cur.sel = b.dataset.sel; show(); setHash(); }}));
   fromHash();
   window.addEventListener('hashchange', fromHash);
+
+  // ---- Copy του κειμένου (για το paper) ----
+  document.getElementById('copyNet').addEventListener('click', async e => {{
+    try {{ await navigator.clipboard.writeText(document.getElementById('netText').innerText); e.target.textContent = 'Copied'; }}
+    catch (err) {{ e.target.textContent = 'Copy failed — select the text'; }}
+    setTimeout(() => e.target.textContent = 'Copy text', 2000);
+  }});
 
   // ---- Lightbox ----
   const lb = document.getElementById('lightbox'), lbImg = lb.querySelector('img');
