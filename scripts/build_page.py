@@ -128,11 +128,89 @@ for tid, title, kind, desc, wide, kpi in RESULT_TABS:
       {''.join(blocks)}
     </section>""")
 
+# ======================= Ιεραρχικό Bayesian μοντέλο (hierarchical_bayes.py) =======================
+HB_JSON = os.path.join(PLOTS, "hierarchical_summary.json")
+hb_tab, hb_section = [], ""
+if os.path.exists(HB_JSON):
+    hb = {h["name"]: h for h in json.load(open(HB_JSON))}
+
+    def ci(d, f="{:.3f}"):
+        return f'{f.format(d["mean"])} <span class="ci">[{f.format(d["hdi_low"])}, {f.format(d["hdi_high"])}]</span>'
+
+    hb_rows = "".join(f"""<tr>
+      <td><span class="dot" style="background:{COLOR[k]}"></span><b>{k}</b>&nbsp;{html.escape(h['label'])}</td>
+      <td class="num">{h['n_events']:,}</td>
+      <td class="num hi">{ci(h['lambda0'])}</td>
+      <td class="num">{ci(h['tau_loglambda_charge'])}</td>
+      <td class="num">{ci(h['tau_loglambda_cell'])}</td>
+      <td class="num">{ci(h['mu0_ps'], '{:+.2f}')}</td>
+      <td class="num">{ci(h['tau_bias_charge_ps'], '{:.2f}')}</td>
+      <td class="num">{ci(h['tau_bias_cell_ps'], '{:.2f}')}</td>
+      <td class="num">{ci(h['nu'], '{:.1f}')}</td>
+    </tr>""" for k, h in hb.items())
+    cov_rows = "".join(f"""<tr>
+      <td><span class="dot" style="background:{COLOR[k]}"></span><b>{k}</b></td>
+      <td class="num">{100*h['coverage']['0.6827']['network_gauss']:.1f}%</td>
+      <td class="num hi">{100*h['coverage']['0.6827']['hierarchical_t']:.1f}%</td>
+      <td class="num">{100*h['coverage']['0.9545']['network_gauss']:.1f}%</td>
+      <td class="num hi">{100*h['coverage']['0.9545']['hierarchical_t']:.1f}%</td>
+      <td class="num">{h['lambda_charge_range'][0]:.2f} – {h['lambda_charge_range'][1]:.2f}</td>
+      <td class="num">{h['lambda_cell_range_filled'][0]:.2f} – {h['lambda_cell_range_filled'][1]:.2f}</td>
+      <td class="num">{h['diagnostics']['rhat_max']:.3f} · {h['diagnostics']['ess_bulk_min']:.0f} · {h['diagnostics']['divergences']}</td>
+    </tr>""" for k, h in hb.items())
+
+    def hbfig(fname, title, kpi=""):
+        return f"""<figure><figcaption><h3 style="margin:0">{title}</h3><span class="fig-kpi">{kpi}</span></figcaption>
+          {img(fname + ".png", title)}{dl(fname)}</figure>"""
+
+    HB_TEXT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hb_section.html")
+    hb_notes = open(HB_TEXT, encoding="utf-8").read() if os.path.exists(HB_TEXT) else ""
+    hb_tab = [("hb", "Hierarchical Bayes")]
+    hb_section = f"""<section class="tabpane" id="hb">
+    <div class="pane-head"><h2>Hierarchical Bayesian check of bias and uncertainty calibration</h2>
+      <p>Is σ<sub>network</sub> calibrated, and is the time unbiased, <i>locally</i> — per charge bin and per position — rather than only on average?
+         One event-level model per scenario, all events, no pull cut, with partial pooling across 20 charge bins and 240 position cells.</p></div>
+    <div class="two" style="margin-top:0">
+      <div class="card prose"><h3>Model</h3>
+        <p><span class="math">Δt<sub>i</sub> ~ Student-t(ν, μ<sub>i</sub>, λ<sub>i</sub>·σ<sub>i</sub>)</span><br>
+           <span class="math">μ<sub>i</sub> = μ<sub>0</sub> + a<sub>q(i)</sub> + b<sub>c(i)</sub></span><br>
+           <span class="math">log λ<sub>i</sub> = log λ<sub>0</sub> + u<sub>q(i)</sub> + v<sub>c(i)</sub></span><br>
+           <span class="math">a ~ N(0, τ<sub>a</sub>), b ~ N(0, τ<sub>b</sub>), u ~ N(0, τ<sub>u</sub>), v ~ N(0, τ<sub>v</sub>)</span></p>
+        <p>Δt = t<sub>network</sub> − t<sub>true</sub> and σ<sub>i</sub> = σ<sub>network</sub> (ps). q(i): charge bin (20 equal-population bins in Q),
+           c(i): position cell (1.3 × 1.33 mm, 20 × 12). λ = 1 means a correctly calibrated per-event uncertainty;
+           the τ’s measure how much bias and calibration really vary with charge and position, after the statistical noise is removed.
+           The Student-t takes the non-Gaussian tails, so no pull cut is needed.</p>
+        <p>Priors: μ<sub>0</sub> ~ N(0, 10 ps), log λ<sub>0</sub> ~ N(0, 0.5), τ<sub>a,b</sub> ~ HalfNormal(5 ps), τ<sub>u,v</sub> ~ HalfNormal(0.3),
+           ν − 1 ~ Gamma(2, 0.1). Non-centred parametrisation, NUTS (NumPyro), 2 chains × 800 draws after 800 warm-up.</p>
+      </div>
+      <div class="card">{hb_notes}</div>
+    </div>
+    <div class="card scroll" style="margin-top:16px"><h3>Posterior (mean and 94% interval)</h3><table>
+      <thead><tr><th>Scenario</th><th class="num">Events</th><th class="num">λ<sub>0</sub></th><th class="num">τ<sub>u</sub> (log λ, charge)</th>
+        <th class="num">τ<sub>v</sub> (log λ, cell)</th><th class="num">μ<sub>0</sub> [ps]</th><th class="num">τ<sub>a</sub> bias, charge [ps]</th>
+        <th class="num">τ<sub>b</sub> bias, cell [ps]</th><th class="num">ν</th></tr></thead>
+      <tbody>{hb_rows}</tbody></table></div>
+    <div class="card scroll" style="margin-top:16px"><h3>Coverage and local calibration</h3><table>
+      <thead><tr><th>Scenario</th><th class="num">|Δt| &lt; 1σ<sub>net</sub><br>(nominal 68.3%)</th><th class="num">hierarchical 68.3% interval</th>
+        <th class="num">|Δt| &lt; 2σ<sub>net</sub><br>(nominal 95.4%)</th><th class="num">hierarchical 95.4% interval</th>
+        <th class="num">λ range over charge</th><th class="num">λ range over cells (≥200 ev.)</th><th class="num">R̂<sub>max</sub> · ESS<sub>min</sub> · div.</th></tr></thead>
+      <tbody>{cov_rows}</tbody></table></div>
+    <div class="hbfigs">
+      {hbfig("hb_1_vs_charge", "Uncertainty scale and bias vs charge", "line: posterior · ○: independent per bin")}
+      {''.join(hbfig(f"hb_{k}_2_maps", f"{k} · {html.escape(hb[k]['label'])} — maps per cell") for k in hb)}
+      {hbfig("hb_3_shrinkage", "Partial pooling per cell", "colour: events in cell")}
+      {hbfig("hb_5_qq", "Calibration QQ plot")}
+      {hbfig("hb_4_hyper", "Hyper-parameter posteriors")}
+    </div>
+    <p class="note">Generated with <code>scripts/hierarchical_bayes.py</code>. The independent estimates (○ and x-axis of the pooling plot) are a separate
+       Student-t maximum-likelihood fit in each bin or cell, with ν fixed to the posterior median. Download the white versions below each plot.</p>
+  </section>"""
+
 # ======================= Network & method =======================
 NET_SECTION = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "net_section.html"), encoding="utf-8").read()
 
 TABS = [("overview", "Overview"), ("compare", "Bias &amp; σ vs charge")] + \
-       [(t[0], t[1]) for t in RESULT_TABS] + [("net", "Network &amp; method")]
+       [(t[0], t[1]) for t in RESULT_TABS] + hb_tab + [("net", "Network &amp; method")]
 TABS_WITH_SEL = ["compare"] + [t[0] for t in RESULT_TABS]
 nav = "".join(f'<button class="tab" data-target="{tid}">{name}</button>' for tid, name in TABS)
 seltoggle = "".join(f'<button class="seg" data-sel="{k}">{v}</button>' for k, v in SEL_TITLE.items())
@@ -208,6 +286,9 @@ page = f"""<!DOCTYPE html>
   .fig-kpi {{ margin-left:auto; font:500 12.5px 'JetBrains Mono',monospace; color:var(--gold-hi); }}
   figure img {{ width:100%; height:auto; display:block; margin-top:10px; border-radius:4px; cursor:zoom-in; }}
   #chargePlot {{ width:100%; height:660px; }}
+  .hbfigs {{ display:grid; grid-template-columns:1fr; gap:16px; margin-top:16px; }}
+  .hbfigs figure {{ max-width:1100px; margin:0 auto; width:100%; }}
+  .ci {{ color:var(--muted); font-size:11.5px; }}
   .two {{ display:grid; grid-template-columns:1.25fr 1fr; gap:16px; margin-top:16px; }}
   ul.notes {{ margin:0; padding-left:20px; color:var(--ink); }}
   ul.notes li {{ margin:7px 0; }}
@@ -289,6 +370,8 @@ page = f"""<!DOCTYPE html>
   </section>
 
   {''.join(result_sections)}
+
+  {hb_section}
 
   <section class="tabpane" id="net-pane">
     <div class="pane-head"><h2>Network &amp; method</h2>

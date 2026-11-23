@@ -1,0 +1,18 @@
+<h3>What it shows</h3>
+<ul class="notes">
+  <li><b>A1 and A3: σ<sub>network</sub> is calibrated.</b> The core scale is λ<sub>0</sub> ≈ 0.92 with ν ≈ 12–15, so the total width
+      λ<sub>0</sub>·√(ν/(ν−2)) ≈ 1.00 σ<sub>network</sub>. λ varies only ~2–5% with charge and position (τ<sub>u</sub>, τ<sub>v</sub> ≈ 0.02–0.06),
+      and the network’s ±1σ / ±2σ intervals already hold 69% / 95% of the events.</li>
+  <li><b>A2: σ<sub>network</sub> underestimates the error, mostly at low charge.</b> λ goes from ≈ 1.67 at Q ≈ 27 to ≈ 0.9 at Q ≈ 99, with very
+      heavy tails (ν ≈ 2.8). The bias goes from about −12 ps to +11 ps across the charge range. The network’s ±1σ holds only 44% of the
+      events; with λ<sub>i</sub>σ<sub>i</sub> and the Student-t the coverage goes back to 68% / 96%. Retraining on noisy data (A3) removes both effects.</li>
+  <li><b>Position-dependent bias in every scenario.</b> τ<sub>b</sub> ≈ 3 ps (A1, A3) and ≈ 4.7 ps (A2). The largest part is a narrow band at
+      x ≈ 0.4–0.5 cm, along the boundary between the centre and the x&nbsp;&gt;&nbsp;0 pads, at about +8 to +12 ps. There is no such band at
+      x ≈ −0.5 cm. It appears in A1 and in A3, so it comes from the data, not from one training. In A2, λ is also largest along the pad
+      boundaries (x ≈ ±0.5 cm and y ≈ 0), where the charge is shared between pads.</li>
+  <li><b>Pooling.</b> Every cell has at least a few hundred events, so pooling changes the cell values only a little.
+      The hierarchical λ per cell is also <i>conditional on charge</i> (the charge dependence is a separate term). The independent fit
+      mixes the charge spectrum of the cell, so the two do not lie exactly on the diagonal.</li>
+  <li><b>Sampling.</b> 0 divergences. Largest R̂ 1.02 (A1), 1.045 (A2), 1.015 (A3). For the quantities in the plots it is 1.02, 1.036 and 1.011.
+      A2 mixes the slowest (ESS ≈ 50 for the plotted values), so read its curves as ± a few percent.</li>
+</ul>
